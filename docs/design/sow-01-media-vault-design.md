@@ -280,9 +280,28 @@ acceptance. It never authorizes source cleanup.
 | Source publication | Full owning gate on exact commit HEAD, `DIRTY 0`, actual host, exit code and log SHA256 recorded before any new PR; publication restrictions remain binding. No PR event may start heavy CI. |
 | Completion | Council/operator receive and explicitly accept the reviewed memo and private annex. Receipt, a commit or a local check alone does not complete the SOW. |
 
-At the inspected baseline there is no owning gate to execute. The specified
-Stage1 lane was absent on the receiving host. Defining that gate and resolving
-the lane/publication route are owner questions; a replacement lightweight check
-must not be passed off as the full gate. Preserve all failures, keep a single
-source writer and one open PR, and use Architect signature and normal merger
-integration without self-approval or self-merge.
+At the inspected baseline there was no offline source gate; its `make verify`
+ran the NAS migration verifier. The Architect subsequently approved a finite
+same-SOW amendment: `make verify` now calls only `scripts/verify-source.sh`,
+and the legacy NAS verifier is explicitly named `make verify-migration`.
+Unknown targets fail. Neither the source gate nor its tests execute a NAS
+operation or import the application modules.
+
+The full gate for this design/source slice checks Python syntax and indentation,
+existing ruff fatal-error rules (`E9,F63,F7,F82`), shell syntax, changed-document
+whitespace/fences/local links, standalone SOW lines, and a finite public artifact
+boundary. Standard-library tests exercise passing and rejecting inputs plus
+Make routing and unknown-target rejection. The scope check permits only this
+memo, Makefile and the gate script to differ from the inspected baseline.
+It checks local link targets against tracked source without following them or
+making network requests. Privacy checks reject named private artifact classes,
+host absolute paths and private-key headers; human privacy review remains
+necessary. The gate requires a clean checkout, Python 3.12+ and already-installed
+ruff; it installs nothing and leaves the checkout clean.
+
+This is the owning publication gate for the approved design-only slice, not
+evidence that existing migration behavior is safe. Product changes require
+separate scope and behavioral tests for the documented defects. Run the full
+gate on the exact commit in the assigned clean lane and preserve all failures.
+Keep a single source writer and one open PR, with Architect signature and normal
+merger integration without self-approval or self-merge.

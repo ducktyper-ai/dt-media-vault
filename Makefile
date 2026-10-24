@@ -29,8 +29,7 @@ help:
 	@echo '$(BLUE)PHASE 2: Migration (When NAS Arrives)$(RESET)'
 	@echo '  $(GREEN)make migrate$(RESET)            - Copy files to NAS with verification (8-12 hours)'
 	@echo '                              Creates folder structure, copies files, verifies hashes'
-	@echo '  $(GREEN)make verify$(RESET)             - Verify all files copied correctly'
-	@echo '                              Run before deleting source files!'
+	@echo '  $(GREEN)make verify-migration$(RESET)   - NAS copy verification (approved access required)'
 	@echo ''
 	@echo '$(BLUE)PHASE 3: Ongoing Workflow$(RESET)'
 	@echo '  $(GREEN)make index-catalog$(RESET)      - Index YAML sidecars into searchable SQLite database'
@@ -38,9 +37,10 @@ help:
 	@echo '                              Usage: make link-project PROJECT=ep-024 SHOOT=london DATE=2025-10-06 DEVICES="fx3 fx30"'
 	@echo ''
 	@echo '$(BLUE)Utilities$(RESET)'
+	@echo '  $(GREEN)make verify$(RESET)             - Offline source lint, tests and design checks; no NAS access'
 	@echo '  $(GREEN)make structure$(RESET)          - Show project file tree'
 	@echo '  $(GREEN)make clean$(RESET)              - Clean analysis results and Python cache'
-	@echo '  $(GREEN)make aggregate <dir>$(RESET)    - Aggregate source files into single document'
+	@echo '  $(GREEN)make aggregate AGGREGATE_TARGET=<dir>$(RESET) - Aggregate source files'
 	@echo '  $(GREEN)make add-paths$(RESET)          - Add file paths as comments to Python files'
 	@echo ''
 	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
@@ -51,7 +51,7 @@ help:
 	@echo '  4. Review analysis_results/ → Check duplicates_report.csv'
 	@echo '  5. [Wait for NAS to arrive]'
 	@echo '  6. make migrate            → Copy to NAS (run in tmux)'
-	@echo '  7. make verify             → Confirm 100% success'
+	@echo '  7. make verify-migration   → Check copied files in an approved NAS session'
 	@echo '  8. make index-catalog      → Build searchable database'
 	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
 	@echo ''
@@ -85,8 +85,15 @@ migrate:
 	@read dummy
 	$(PYTHON) -m media_toolkit.migrator --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
-.PHONY: verify
-verify:
+.PHONY: verify verify-source verify-migration
+# The owning source gate is offline. Never depend on a NAS operation here.
+verify: verify-source
+
+verify-source:
+	bash scripts/verify-source.sh
+
+# This legacy verifier is not an offline quality gate or permission to clean data.
+verify-migration:
 	$(PYTHON) -m media_toolkit.verifier --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
 .PHONY: clean
@@ -110,7 +117,7 @@ structure: ## Show project structure
 	@echo "${RESET}"
 
 .PHONY: aggregate
-aggregate: ## Aggregate text files from a directory (usage: make aggregate <directory>)
+aggregate: ## Usage: make aggregate AGGREGATE_TARGET=<directory>
 	@echo "${BLUE}Aggregating files from: ${AGGREGATE_TARGET}${RESET}"
 	@# Create the aggregate script in memory and execute it
 	@echo '#!/bin/bash' > .temp_aggregate.sh
@@ -289,9 +296,7 @@ add-paths: ## Add file paths as first-line comments to all Python files
 	@rm add_paths.py
 	@echo "${GREEN}✓ File paths added to all Python files${RESET}"
 
-# Dummy target for directory arguments to aggregate
-%:
-	@:
+# Unknown targets deliberately use make's failing default; no catch-all rule.
 
 .PHONY: index-catalog
 index-catalog:
