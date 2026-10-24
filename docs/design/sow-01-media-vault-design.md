@@ -292,7 +292,9 @@ existing ruff fatal-error rules (`E9,F63,F7,F82`), shell syntax, changed-documen
 whitespace/fences/local links, standalone SOW lines, and a finite public artifact
 boundary. Standard-library tests exercise passing and rejecting inputs plus
 Make routing and unknown-target rejection. The scope check permits only this
-memo, Makefile and the gate script to differ from the inspected baseline.
+memo, Makefile, the gate script and both README updates to differ from the
+inspected baseline. The README updates distinguish offline source checks from
+NAS verification and remove source-cleanup advice.
 It checks local link targets against tracked source without following them or
 making network requests. Privacy checks reject named private artifact classes,
 host absolute paths and private-key headers; human privacy review remains

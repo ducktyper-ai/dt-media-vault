@@ -1,5 +1,14 @@
 # Getting Started Guide
 
+sow: dt-media-vault-SOW-01
+
+`make verify` now runs the offline source/design gate without media or NAS access.
+The historical migration workflow below requires separate operator approval.
+Its NAS check is `make verify-migration` and has known correctness limitations;
+see the [design memo](docs/design/sow-01-media-vault-design.md).
+Preserve all original NAS and backup content. No verification result authorizes
+deletion, moving or renaming, and duplicates are reported only.
+
 ## Prerequisites
 
 - **macOS** (tested on 15.4.1)
@@ -110,9 +119,9 @@ tmux new-session -s migration
 make migrate
 
 # 5. Verify everything copied correctly
-make verify
+make verify-migration
 
-# 6. If verification passes 100%, you can clean the SSD
+# 6. Review independent restore evidence with the operator; preserve sources
 ```
 
 ## Troubleshooting
@@ -172,7 +181,7 @@ Run in tmux/screen and let it run overnight.
 
 ### Verification Phase
 - **Time**: 2-4 hours
-- **Action**: Must pass 100% before cleaning source SSD
+- **Action**: Review independent restore evidence; preserve source content
 
 ## Common Questions
 

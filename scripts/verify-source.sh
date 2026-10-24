@@ -88,7 +88,8 @@ def check_public_artifact(name, text):
 
 def check_source_scope(names):
     # Design-only SOW: product modules, dependencies and live NAS tooling stay intact.
-    allowed = {MEMO, "Makefile", "scripts/verify-source.sh"}
+    allowed = {MEMO, "Makefile", "scripts/verify-source.sh",
+               "README.md", "README_GETTING_STARTED.md"}
     require(set(names) <= allowed, "change outside finite design/gate scope")
     require(MEMO in names, "design memo missing from source slice")
 

@@ -1,5 +1,15 @@
 # Media Archive Migration Toolkit
 
+sow: dt-media-vault-SOW-01
+
+Maintainer status: `make verify` is the offline source/design gate. It runs lint
+and synthetic tests without accessing media or the NAS. The historical migration
+workflow below requires separate operator approval; current migration and NAS
+verification have known safety defects documented in the
+[design memo](docs/design/sow-01-media-vault-design.md).
+Keep original NAS and backup content intact. Duplicates are reported only;
+passing a source gate or migration check never authorizes cleanup.
+
 A comprehensive system for migrating, organizing, and managing 4TB+ media archives with automatic deduplication, metadata extraction, and hash verification.
 
 ## Features
@@ -88,10 +98,11 @@ make migrate
 
 ```bash
 # Verify all files copied correctly
-make verify
+make verify-migration
 ```
 
-If verification passes 100%, you can safely clean the source SSD.
+The legacy verifier can report success incorrectly. Independent restore evidence
+and operator review are required; do not delete, move or rename source content.
 
 ## Project Structure
 
@@ -205,11 +216,11 @@ The toolkit automatically detects duplicates and keeps the best copy based on pr
 - `make create-structure` - Create folder structure on NAS
 - `make migrate` - Execute migration (8-12 hours)
 - `make migrate-dry` - Preview migration without copying
-- `make verify` - Verify all files copied correctly
+- `make verify-migration` - Legacy NAS copy check; approved access required, known limitations
 
 ### Utilities
 - `make clean` - Clean analysis results and cache
-- `make test` - Run tests
+- `make verify` - Full offline source/design gate: lint, tests and document checks
 
 ## What Gets Excluded
 
@@ -278,7 +289,7 @@ make migrate
 - **Week 2**: NAS arrives, create structure
 - **Week 2**: Execute migration (~8-12 hours)
 - **Week 2**: Verify migration, update cloud backup
-- **Week 3+**: Clean SSD, start using new structure
+- **Week 3+**: Review restore evidence and future workflow with the operator; preserve sources
 
 ## Future Features (Phase 2)
 
@@ -310,4 +321,5 @@ Built following the QuackVerse development pattern with UV + pyproject.toml + Ma
 
 ---
 
-**Remember**: The source SSD stays untouched until verification passes 100%. You have a complete cloud backup as additional safety.
+**Remember**: Preserve source, NAS and backup content. Backup protection requires
+independently verified restores; a success message never authorizes cleanup.
