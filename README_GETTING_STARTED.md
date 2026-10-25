@@ -2,6 +2,12 @@
 
 sow: dt-media-vault-SOW-01
 
+Legacy storage Make targets are disabled unconditionally, including with explicit
+roots or approval flags. Storage-volume defaults have been removed. The historical
+commands below are reference material; replacement tools need separate scope and
+review before any storage session.
+
+
 `make verify` now runs the offline source/design gate without media or NAS access.
 The historical migration workflow below requires separate operator approval.
 Its NAS check is `make verify-migration` and has known correctness limitations;

@@ -12,9 +12,11 @@ import io
 import os
 import posixpath
 import re
+import shlex
 import subprocess
 import sys
 import tabnanny
+import tempfile
 import tokenize
 import unittest
 from pathlib import Path, PurePosixPath
@@ -104,6 +106,26 @@ def added_text(before, after):
     )
 
 
+NAS_TARGETS = ("check-volumes", "analyze-dry", "analyze", "migrate",
+               "verify-migration", "index-catalog", "link-project")
+
+
+def assert_storage_refused(makefile, target, directory):
+    # Only synthetic local roots and a recording worker; no application execution.
+    marker = directory / "worker-called"
+    worker = directory / "worker.py"
+    worker.write_text("from pathlib import Path\nPath('worker-called').touch()\n")
+    (directory / "source").mkdir(exist_ok=True)
+    (directory / "target").mkdir(exist_ok=True)
+    result = run(["make", "--no-print-directory", "-rR", "-f", str(makefile), target,
+                  "SOURCE_VOLUME=" + str(directory / "source"),
+                  "TARGET_VOLUME=" + str(directory / "target"),
+                  "PYTHON=" + shlex.join([sys.executable, str(worker)])],
+                 cwd=directory, input="\n")
+    require(result.returncode != 0 and "NAS_WORKFLOW_DISABLED" in result.stderr
+            and not marker.exists(), "storage refusal failed: " + target)
+
+
 class GateControls(unittest.TestCase):
     def test_python_valid_and_rejects_syntax(self):
         lint_python("def identity(value):\n    return value\n")
@@ -166,6 +188,30 @@ class GateControls(unittest.TestCase):
         result = run(["make", "--no-print-directory", "-n", "verify"])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "bash scripts/verify-source.sh")
+
+    def test_make_has_no_storage_defaults(self):
+        text = (ROOT / "Makefile").read_text()
+        self.assertNotRegex(text, r"(?m)^\s*(?:SOURCE_VOLUME|TARGET_VOLUME)\s*[:?+]?=")
+        self.assertNotIn("/Volu" + "mes/", text)
+
+    def test_all_storage_targets_refuse_before_worker(self):
+        for target in NAS_TARGETS:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
+                assert_storage_refused(ROOT / "Makefile", target, Path(temporary))
+
+    def test_storage_refusal_detects_removed_guard(self):
+        original = (ROOT / "Makefile").read_text()
+        mutant, count = re.subn(r"(?m)^\t\$\(error NAS_WORKFLOW_DISABLED:[^\n]+$",
+                                "\t@:", original)
+        self.assertEqual(count, 1, "guard mutation must change exactly one recipe")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            makefile = directory / "Makefile"
+            makefile.write_text(mutant)
+            with self.assertRaisesRegex(ValueError, "storage refusal failed"):
+                assert_storage_refused(makefile, "index-catalog", directory)
+            self.assertTrue((directory / "worker-called").is_file(),
+                            "mutant must reach the recording worker")
 
     def test_make_unknown_target_fails(self):
         result = run(["make", "--no-print-directory", "-n",

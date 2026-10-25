@@ -7,8 +7,12 @@ RESET  := $(shell tput -Txterm sgr0)
 PYTHON_VERSION := 3.13
 VENV_NAME := .venv
 PYTHON := $(VENV_NAME)/bin/python
-SOURCE_VOLUME := /Volumes/RodMedia
-TARGET_VOLUME := /Volumes/RodNAS/Media
+
+# Legacy storage entry points stay disabled pending replacement tools and scope.
+.PHONY: nas-disabled
+check-volumes analyze-dry analyze migrate verify-migration index-catalog link-project: nas-disabled
+nas-disabled:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 
 .PHONY: help
 help:
@@ -17,6 +21,7 @@ help:
 	@echo '$(YELLOW)                  Media Archive Migration Toolkit$(RESET)'
 	@echo '$(YELLOW)═══════════════════════════════════════════════════════════════════$(RESET)'
 	@echo ''
+	@echo 'Legacy storage targets below are disabled; use make verify for offline checks.'
 	@echo '$(BLUE)PHASE 0: Initial Setup$(RESET)'
 	@echo '  $(GREEN)make setup$(RESET)              - Create Python environment and install dependencies'
 	@echo '  $(GREEN)make check-volumes$(RESET)      - Verify source/target volumes are accessible'
@@ -301,13 +306,13 @@ add-paths: ## Add file paths as first-line comments to all Python files
 .PHONY: index-catalog
 index-catalog:
 	$(PYTHON) -m media_toolkit.catalog index-sidecars \
-	  --catalog /Volumes/RodNAS/Media/Catalog/catalog.sqlite \
-	  --root /Volumes/RodNAS/Media
+	  --catalog $(TARGET_VOLUME)/Catalog/catalog.sqlite \
+	  --root $(TARGET_VOLUME)
 
 .PHONY: link-project
 link-project:
 	$(PYTHON) -m media_toolkit.link_into_project \
-	  --root /Volumes/RodNAS/Media \
+	  --root $(TARGET_VOLUME) \
 	  --project $(PROJECT) \
 	  --shoot $(SHOOT) \
 	  --date $(DATE) \

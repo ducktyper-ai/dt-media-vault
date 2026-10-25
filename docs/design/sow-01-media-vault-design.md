@@ -332,3 +332,17 @@ and no-replacement publication semantics compatible with the charter's ban on
 moving or renaming NAS/backup content. Resolve that interface before coding it.
 Custody, network policy, execution placement, account ACLs, dependency adoption
 and an off-site provider each retain their owner/Council approval requirements.
+
+
+### Council C1 repair awaiting independent review
+
+The Makefile no longer supplies storage-volume defaults or literal host roots.
+All seven legacy storage targets (`check-volumes`, `analyze-dry`, `analyze`,
+`migrate`, `verify-migration`, `index-catalog`, `link-project`) depend on an
+unconditional failing guard. Explicit root variables cannot enable them.
+The offline gate executes each target with temporary synthetic roots and a
+recording worker, requiring failure before that worker is reached. A fixture
+removing the guard must reach the worker and fail the refusal assertion.
+These controls qualify Make entry-point refusal only. Council C2 product behavior
+controls remain unimplemented and require separate product scope. C1 acceptance
+requires Council review of the new exact head; earlier signatures do not apply.
