@@ -44,6 +44,13 @@ The following findings are from source inspection, rather than a live scan:
 
 ## Zeocore refactor proposal
 
+The baseline Makefile also has implicit storage/NAS volume defaults.
+`migrate`, `index-catalog`, `link-project` and its old `verify` operate on those
+roots. Indexing writes a database on the NAS, and linking can unlink an existing
+file. The offline source gate does not qualify these operations. Remove implicit
+volume defaults and disable legacy NAS operations under an explicit reviewed
+amendment before any NAS session.
+
 Use zeocore for typed capability boundaries, explicit services/configuration,
 structured results and bounded execution. Keep media policy in this repository.
 The owner documentation at
@@ -84,6 +91,13 @@ available. Indexes accelerate queries but remain rebuildable from versioned
 private manifests. Store no absolute personal paths in public contracts.
 Do not presume zeocore supplies a general SQLite or NAS connector.
 
+Keep the catalogue, manifests, hash cache and reports under an operator-approved
+private data root on the execution host, outside Git checkouts, NAS shares and
+backup roots. Use a `dt-media-vault` directory with mode `0700` and data files
+with mode `0600`; the exact root is private operator configuration. Preserve
+these private records through a separately approved backup plan. Discovery
+writes no catalogue database or reports to the NAS.
+
 Implementation phases after design acceptance: agree owner contracts and
 dependency/version checks; establish a synthetic offline test gate; implement
 read-only discovery and reporting; validate a bounded approved real session;
@@ -102,7 +116,6 @@ Media/
   Projects/<yyyy>/<date>_<project-id>/
     00_admin/ 01_assets/ 02_shoots/ 03_selects/ 04_proxies/
     05_renders/ 06_deliverables/
-  Catalog/                     # private manifests and derived metadata
 DeviceBackups/<source-id>/<backup-set-id>/
 ```
 
@@ -130,6 +143,9 @@ instructions rather than becoming media-only folders.
    unreadable directories and backup containers. Do not follow symlinks or cross
    mounts automatically. A coverage ledger prevents a partial scan being called
    whole-NAS coverage.
+   Collect no GPS/location tags, faces or biometric identifiers by default.
+   Any later metadata probe needs an explicit field allowlist and separate
+   privacy approval; do not retain arbitrary ffprobe tags.
 2. Group ordinary regular-file candidates by byte length. Include empty and tiny
    files. Size and optional samples only reduce work; neither establishes
    duplication. Hash unique-size files too when constructing the backup manifest.
@@ -169,10 +185,11 @@ probe and separate scope. Search works against the last inventory while the NAS
 is off and visibly shows its timestamp, partial coverage and offline status.
 Opening a file requires a newly authorized live access window.
 
-The inspected dt-library checkpoint
-`0f458403a81551a71a6670853ec5041e7cd0a01d` separates private RAW, curated content,
-identity/provenance and exception accounting. Reuse those boundaries, not its
-newsletter pipeline or its interpretation of duplicate inputs. Propose an
+For dt-library integration, keep private RAW, curated publishing content,
+identity/provenance and exception accounting separate. Reuse those boundaries
+without adopting the newsletter pipeline's interpretation of duplicate inputs.
+Consumer source checkpoints stay in the private design evidence until the
+receiving owner approves public attribution. Propose an
 owner-agreed reference from a studio asset to a media content ID and approved
 derivative. dt-library receives only admitted publishing metadata; no personal
 inventory, footage bytes, transcripts or RAW path is transferred by default.
@@ -193,8 +210,9 @@ read-only client mount independently. Test ACL denial with an operator-owned
 synthetic canary through a separately approved test; do not attempt writes to
 personal data to prove read-only behavior.
 
-Reach the NAS over its existing Tailscale identity from the approved execution
-host. Propose a network grant limited to that host/identity, destination and
+Propose Tailscale access from the approved execution host, with the exact
+topology retained in the private operator plan. Limit the grant to that
+approved host/identity, destination and
 chosen file-service port, with no broad subnet or admin-console access.
 [Tailscale grants](https://tailscale.com/docs/features/access-control/grants)
 can restrict destination/protocol/port; they do not establish file permissions.
@@ -208,9 +226,10 @@ history, environment dumps, files, messages, logs or Git. Confirm a suitable
 NAS connection exists with the Connect owner before the first session; do not
 invent a connector API or substitute a shared administrator credential.
 
-The NAS is normally powered off. Record `offline`, preserve the last scan as
-stale, and send one request to the Architect for an operator power-on/time
-window. Do not wait silently, auto-wake, retry indefinitely or infer data loss
+Storage availability is operator-controlled. When unavailable, record `offline`,
+preserve the last scan as stale, and send one request to the Architect for an
+operator-approved availability window. Do not wait silently, auto-wake, retry
+indefinitely or infer data loss
 from unavailability. The private first-session annex defines the exact proposed
 read-only commands and private evidence destination. No account or mount is
 created during this task.
@@ -277,6 +296,7 @@ acceptance. It never authorizes source cleanup.
 | Contracts and dependency pins | Zeocore and relevant consumers agree ownership and compatible versions before implementation; required dependency checks precede installation. |
 | First discovery session | Operator approves the private annex, exact roots, time, account/ACLs, connection custody and commands. Only then can read-only access occur. |
 | Protection | Operator selects destination, RPO/RTO, retention and key recovery; separate scope proves copy and restore before any write plan. |
+| Council conditions | Resolve legacy NAS targets/defaults and current-HEAD public-data scrubbing under exact implementation coverage. Before any product implementation, require offline negative controls for duplicate coverage, path/collision containment, no overwrite, verification errors/omissions, changed reads, preview-manifest rejection and absent roots. |
 | Source publication | Full owning gate on exact commit HEAD, `DIRTY 0`, actual host, exit code and log SHA256 recorded before any new PR; publication restrictions remain binding. No PR event may start heavy CI. |
 | Completion | Council/operator receive and explicitly accept the reviewed memo and private annex. Receipt, a commit or a local check alone does not complete the SOW. |
 
@@ -307,3 +327,13 @@ separate scope and behavioral tests for the documented defects. Run the full
 gate on the exact commit in the assigned clean lane and preserve all failures.
 Keep a single source writer and one open PR, with Architect signature and normal
 merger integration without self-approval or self-merge.
+
+Council design conditions remain distinct from this source gate. The private
+catalogue and metadata-minimization rules above address the written design;
+they do not establish an implementation. Current public baseline configuration
+and examples require a finite scrub at HEAD, with history rewriting reserved
+to the operator. Any future writer needs independently reviewed partial-version
+and no-replacement publication semantics compatible with the charter's ban on
+moving or renaming NAS/backup content. Resolve that interface before coding it.
+Custody, network policy, execution placement, account ACLs, dependency adoption
+and an off-site provider each retain their owner/Council approval requirements.
