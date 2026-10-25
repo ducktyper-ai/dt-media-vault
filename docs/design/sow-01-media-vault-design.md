@@ -337,7 +337,7 @@ and an off-site provider each retain their owner/Council approval requirements.
 
 The Makefile no longer supplies storage-volume defaults or literal host roots.
 All seven legacy storage targets (`check-volumes`, `analyze-dry`, `analyze`,
-`migrate`, `verify-migration`, `index-catalog`, `link-project`) depend on an
+`migrate`, `verify-migration`, `index-catalog`, `link-project`) depend on a
 shared failing guard and a failure as the first line of each recipe. Explicit
 root variables and `make -o nas-disabled` cannot enable their recipes.
 The offline gate executes each target with temporary synthetic roots and a

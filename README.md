@@ -4,8 +4,8 @@ sow: dt-media-vault-SOW-01
 
 Legacy storage Make targets are disabled unconditionally, including with explicit
 roots or approval flags, and with prerequisites marked old using `make -o`.
-Each storage recipe refuses on its first line. Storage-volume defaults have been removed. The historical
-commands below are reference material; replacement tools need separate scope and
+Each storage recipe refuses on its first line. Storage-volume defaults have been
+removed. The historical commands below are reference material; replacement tools need separate scope and
 review before any storage session.
 
 
