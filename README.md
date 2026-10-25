@@ -3,7 +3,8 @@
 sow: dt-media-vault-SOW-01
 
 Legacy storage Make targets are disabled unconditionally, including with explicit
-roots or approval flags. Storage-volume defaults have been removed. The historical
+roots or approval flags, and with prerequisites marked old using `make -o`.
+Each storage recipe refuses on its first line. Storage-volume defaults have been removed. The historical
 commands below are reference material; replacement tools need separate scope and
 review before any storage session.
 
@@ -89,10 +90,10 @@ make report
 # Connect your NAS, verify it's mounted at /Volumes/RodNAS
 
 # Create folder structure on NAS
-make create-structure
+# No approved structure writer is available.
 
 # Dry run first (preview)
-make migrate-dry
+# No migration preview target is available.
 
 # Execute migration (8-12 hours)
 # IMPORTANT: Run in tmux/screen so it doesn't stop if connection drops
@@ -219,9 +220,9 @@ The toolkit automatically detects duplicates and keeps the best copy based on pr
 - `make duplicates` - Show duplicate statistics
 
 ### Migration (When NAS Arrives)
-- `make create-structure` - Create folder structure on NAS
+- Structure creation is unavailable pending approved tools.
 - `make migrate` - Execute migration (8-12 hours)
-- `make migrate-dry` - Preview migration without copying
+- Migration preview is unavailable pending approved tools.
 - `make verify-migration` - Legacy NAS copy check; approved access required, known limitations
 
 ### Utilities

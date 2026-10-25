@@ -41,7 +41,6 @@ The following findings are from source inspection, rather than a live scan:
 | `migrator.py:_create_sidecar` | Replacing the extension with `.yaml` makes equal-stem files of different formats collide. | Address sidecars by a separate stable file/location identity. |
 | `analyzer.py:_determine_target_path`; project scripts | Mapping and project scaffolds use different layouts and device taxonomies; equal basenames can collide. Scripts write metadata without a reviewed plan. | Define one versioned naming policy, preserve card/package structure and preview every future allocation. |
 | `pyproject.toml`; Makefile | Declared Python floor is 3.10, while scanning uses `Path.walk()` (3.12+). No tracked tests, CI workflow or owning verification target exists. A catch-all Make target silently accepts unknown names. | Agree the interpreter and an actual full gate before publication. A successful `make test` or unknown `make verify-full` would not prove testing occurred. |
-
 | Makefile volume defaults and legacy targets | The baseline defaults name storage/NAS mounts. `migrate`, `index-catalog`, `link-project` and the old `verify` operate on those roots; indexing writes a database on the NAS and linking can unlink an existing file. | The offline source gate does not qualify these operations. Remove implicit volume defaults and disable legacy NAS operations under an explicit reviewed amendment before any NAS session. |
 
 ## Zeocore refactor proposal
@@ -339,10 +338,29 @@ and an off-site provider each retain their owner/Council approval requirements.
 The Makefile no longer supplies storage-volume defaults or literal host roots.
 All seven legacy storage targets (`check-volumes`, `analyze-dry`, `analyze`,
 `migrate`, `verify-migration`, `index-catalog`, `link-project`) depend on an
-unconditional failing guard. Explicit root variables cannot enable them.
+shared failing guard and a failure as the first line of each recipe. Explicit
+root variables and `make -o nas-disabled` cannot enable their recipes.
 The offline gate executes each target with temporary synthetic roots and a
-recording worker, requiring failure before that worker is reached. A fixture
-removing the guard must reach the worker and fail the refusal assertion.
+recording worker, requiring failure before that worker is reached. Tests also
+mark the shared guard old (and analysis prerequisites old) to exercise each
+recipe refusal. Seven fixtures remove one recipe guard at a time and must fail
+the refusal assertion; six reach the recording worker and the volume-check
+fixture succeeds against its temporary root, demonstrating the missing guard.
 These controls qualify Make entry-point refusal only. Council C2 product behavior
 controls remain unimplemented and require separate product scope. C1 acceptance
 requires Council review of the new exact head; earlier signatures do not apply.
+
+
+Council approved source head `7e99631` with binding conditions, then identified
+that `make -o nas-disabled` can skip a prerequisite-only guard. This repair puts
+the refusal first in every storage recipe; independent review applies to the
+new exact head only. No NAS session is authorized by the earlier verdict.
+C2 and the finite public-scrub backlog also retain host defaults in
+`scripts/new_shoot.sh`, `scripts/scaffold_project.sh` and `analyzer.py`'s manifest
+generation.
+Those files remain outside this five-path implementation slice. The getting-started
+advice to restore a target-volume default is removed here. Neither this targeted
+removal nor the Make repair constitutes a full public-source scrub or product
+qualification. Missing structure/migration-preview Make commands are no longer
+presented as usable commands in the READMEs. Public role-name disclosure remains
+an Architect review decision; no infrastructure inventory is added.

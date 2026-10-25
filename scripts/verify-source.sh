@@ -110,14 +110,14 @@ NAS_TARGETS = ("check-volumes", "analyze-dry", "analyze", "migrate",
                "verify-migration", "index-catalog", "link-project")
 
 
-def assert_storage_refused(makefile, target, directory):
+def assert_storage_refused(makefile, target, directory, make_options=()):
     # Only synthetic local roots and a recording worker; no application execution.
     marker = directory / "worker-called"
     worker = directory / "worker.py"
     worker.write_text("from pathlib import Path\nPath('worker-called').touch()\n")
     (directory / "source").mkdir(exist_ok=True)
     (directory / "target").mkdir(exist_ok=True)
-    result = run(["make", "--no-print-directory", "-rR", "-f", str(makefile), target,
+    result = run(["make", "--no-print-directory", "-rR", "-f", str(makefile), *make_options, target,
                   "SOURCE_VOLUME=" + str(directory / "source"),
                   "TARGET_VOLUME=" + str(directory / "target"),
                   "PYTHON=" + shlex.join([sys.executable, str(worker)])],
@@ -199,19 +199,34 @@ class GateControls(unittest.TestCase):
             with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
                 assert_storage_refused(ROOT / "Makefile", target, Path(temporary))
 
-    def test_storage_refusal_detects_removed_guard(self):
+    def test_storage_targets_refuse_when_shared_guard_marked_old(self):
+        for target in NAS_TARGETS:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
+                options = ["-o", "nas-disabled"]
+                if target in {"analyze", "analyze-dry"}:
+                    options += ["-o", "check-volumes"]
+                assert_storage_refused(ROOT / "Makefile", target, Path(temporary), options)
+
+    def test_storage_refusal_detects_each_removed_recipe_guard(self):
         original = (ROOT / "Makefile").read_text()
-        mutant, count = re.subn(r"(?m)^\t\$\(error NAS_WORKFLOW_DISABLED:[^\n]+$",
-                                "\t@:", original)
-        self.assertEqual(count, 1, "guard mutation must change exactly one recipe")
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            makefile = directory / "Makefile"
-            makefile.write_text(mutant)
-            with self.assertRaisesRegex(ValueError, "storage refusal failed"):
-                assert_storage_refused(makefile, "index-catalog", directory)
-            self.assertTrue((directory / "worker-called").is_file(),
-                            "mutant must reach the recording worker")
+        guard = "\t$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)\n"
+        for target in NAS_TARGETS:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
+                header = target + (": check-volumes\n" if target in {"analyze", "analyze-dry"}
+                                   else ":\n")
+                self.assertEqual(original.count(header + guard), 1)
+                mutant = original.replace(header + guard, header, 1)
+                directory = Path(temporary)
+                makefile = directory / "Makefile"
+                makefile.write_text(mutant)
+                options = ["-o", "nas-disabled"]
+                if target in {"analyze", "analyze-dry"}:
+                    options += ["-o", "check-volumes"]
+                with self.assertRaisesRegex(ValueError, "storage refusal failed"):
+                    assert_storage_refused(makefile, target, directory, options)
+                if target != "check-volumes":
+                    self.assertTrue((directory / "worker-called").is_file(),
+                                    "mutant must reach the recording worker")
 
     def test_make_unknown_target_fails(self):
         result = run(["make", "--no-print-directory", "-n",

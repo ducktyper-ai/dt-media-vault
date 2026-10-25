@@ -70,22 +70,26 @@ setup:
 
 .PHONY: check-volumes
 check-volumes:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(BLUE)Checking volumes...$(RESET)"
 	@test -d "$(SOURCE_VOLUME)" || (echo "$(RED)Source not found$(RESET)" && exit 1)
 	@echo "$(GREEN)Source OK: $(SOURCE_VOLUME)$(RESET)"
 
 .PHONY: analyze-dry
 analyze-dry: check-volumes
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results --dry-run
 
 .PHONY: analyze
 analyze: check-volumes
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 4-6 hours. Press Enter to continue...$(RESET)"
 	@read dummy
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results
 
 .PHONY: migrate
 migrate:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 8-12 hours. Press Enter to continue...$(RESET)"
 	@read dummy
 	$(PYTHON) -m media_toolkit.migrator --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
@@ -99,6 +103,7 @@ verify-source:
 
 # This legacy verifier is not an offline quality gate or permission to clean data.
 verify-migration:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.verifier --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
 .PHONY: clean
@@ -305,12 +310,14 @@ add-paths: ## Add file paths as first-line comments to all Python files
 
 .PHONY: index-catalog
 index-catalog:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.catalog index-sidecars \
 	  --catalog $(TARGET_VOLUME)/Catalog/catalog.sqlite \
 	  --root $(TARGET_VOLUME)
 
 .PHONY: link-project
 link-project:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.link_into_project \
 	  --root $(TARGET_VOLUME) \
 	  --project $(PROJECT) \

@@ -3,7 +3,8 @@
 sow: dt-media-vault-SOW-01
 
 Legacy storage Make targets are disabled unconditionally, including with explicit
-roots or approval flags. Storage-volume defaults have been removed. The historical
+roots or approval flags, and with prerequisites marked old using `make -o`.
+Each storage recipe refuses on its first line. Storage-volume defaults have been removed. The historical
 commands below are reference material; replacement tools need separate scope and
 review before any storage session.
 
@@ -115,10 +116,10 @@ open analysis_results/duplicates_report.csv
 # 1. Connect NAS, verify it mounts at /Volumes/RodNAS
 
 # 2. Create folder structure
-make create-structure
+# No approved structure writer is available.
 
 # 3. Preview migration
-make migrate-dry
+# No migration preview target is available.
 
 # 4. Execute migration (in tmux!)
 tmux new-session -s migration
@@ -159,7 +160,7 @@ ffmpeg -version
 chmod +x scripts/*.sh
 
 # Or just use make commands (they handle this)
-make create-structure
+# No approved structure writer is available.
 ```
 
 ### Analysis is slow
@@ -204,7 +205,8 @@ A: Expect 400-800GB from deduplication based on your archive.
 A: Yes! Edit the manifest JSON to only include certain files, or modify the Makefile `--batch-size` parameter.
 
 **Q: What if my NAS has a different path?**
-A: Edit the Makefile and change `TARGET_VOLUME := /Volumes/RodNAS/Media` to your actual path.
+A: Do not restore storage defaults or enable the legacy recipes. Replacement tools,
+exact selected roots and a separately approved storage session are required.
 
 ## Next Steps After Migration
 
