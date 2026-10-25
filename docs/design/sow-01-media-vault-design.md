@@ -42,14 +42,9 @@ The following findings are from source inspection, rather than a live scan:
 | `analyzer.py:_determine_target_path`; project scripts | Mapping and project scaffolds use different layouts and device taxonomies; equal basenames can collide. Scripts write metadata without a reviewed plan. | Define one versioned naming policy, preserve card/package structure and preview every future allocation. |
 | `pyproject.toml`; Makefile | Declared Python floor is 3.10, while scanning uses `Path.walk()` (3.12+). No tracked tests, CI workflow or owning verification target exists. A catch-all Make target silently accepts unknown names. | Agree the interpreter and an actual full gate before publication. A successful `make test` or unknown `make verify-full` would not prove testing occurred. |
 
-## Zeocore refactor proposal
+| Makefile volume defaults and legacy targets | The baseline defaults name storage/NAS mounts. `migrate`, `index-catalog`, `link-project` and the old `verify` operate on those roots; indexing writes a database on the NAS and linking can unlink an existing file. | The offline source gate does not qualify these operations. Remove implicit volume defaults and disable legacy NAS operations under an explicit reviewed amendment before any NAS session. |
 
-The baseline Makefile also has implicit storage/NAS volume defaults.
-`migrate`, `index-catalog`, `link-project` and its old `verify` operate on those
-roots. Indexing writes a database on the NAS, and linking can unlink an existing
-file. The offline source gate does not qualify these operations. Remove implicit
-volume defaults and disable legacy NAS operations under an explicit reviewed
-amendment before any NAS session.
+## Zeocore refactor proposal
 
 Use zeocore for typed capability boundaries, explicit services/configuration,
 structured results and bounded execution. Keep media policy in this repository.
