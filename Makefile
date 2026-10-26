@@ -7,8 +7,12 @@ RESET  := $(shell tput -Txterm sgr0)
 PYTHON_VERSION := 3.13
 VENV_NAME := .venv
 PYTHON := $(VENV_NAME)/bin/python
-SOURCE_VOLUME := /Volumes/RodMedia
-TARGET_VOLUME := /Volumes/RodNAS/Media
+
+# Legacy storage entry points stay disabled pending replacement tools and scope.
+.PHONY: nas-disabled
+check-volumes analyze-dry analyze migrate verify-migration index-catalog link-project: nas-disabled
+nas-disabled:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 
 .PHONY: help
 help:
@@ -17,6 +21,7 @@ help:
 	@echo '$(YELLOW)                  Media Archive Migration Toolkit$(RESET)'
 	@echo '$(YELLOW)═══════════════════════════════════════════════════════════════════$(RESET)'
 	@echo ''
+	@echo 'Legacy storage targets below are disabled; use make verify for offline checks.'
 	@echo '$(BLUE)PHASE 0: Initial Setup$(RESET)'
 	@echo '  $(GREEN)make setup$(RESET)              - Create Python environment and install dependencies'
 	@echo '  $(GREEN)make check-volumes$(RESET)      - Verify source/target volumes are accessible'
@@ -29,8 +34,7 @@ help:
 	@echo '$(BLUE)PHASE 2: Migration (When NAS Arrives)$(RESET)'
 	@echo '  $(GREEN)make migrate$(RESET)            - Copy files to NAS with verification (8-12 hours)'
 	@echo '                              Creates folder structure, copies files, verifies hashes'
-	@echo '  $(GREEN)make verify$(RESET)             - Verify all files copied correctly'
-	@echo '                              Run before deleting source files!'
+	@echo '  $(GREEN)make verify-migration$(RESET)   - NAS copy verification (approved access required)'
 	@echo ''
 	@echo '$(BLUE)PHASE 3: Ongoing Workflow$(RESET)'
 	@echo '  $(GREEN)make index-catalog$(RESET)      - Index YAML sidecars into searchable SQLite database'
@@ -38,9 +42,10 @@ help:
 	@echo '                              Usage: make link-project PROJECT=ep-024 SHOOT=london DATE=2025-10-06 DEVICES="fx3 fx30"'
 	@echo ''
 	@echo '$(BLUE)Utilities$(RESET)'
+	@echo '  $(GREEN)make verify$(RESET)             - Offline source lint, tests and design checks; no NAS access'
 	@echo '  $(GREEN)make structure$(RESET)          - Show project file tree'
 	@echo '  $(GREEN)make clean$(RESET)              - Clean analysis results and Python cache'
-	@echo '  $(GREEN)make aggregate <dir>$(RESET)    - Aggregate source files into single document'
+	@echo '  $(GREEN)make aggregate AGGREGATE_TARGET=<dir>$(RESET) - Aggregate source files'
 	@echo '  $(GREEN)make add-paths$(RESET)          - Add file paths as comments to Python files'
 	@echo ''
 	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
@@ -51,7 +56,7 @@ help:
 	@echo '  4. Review analysis_results/ → Check duplicates_report.csv'
 	@echo '  5. [Wait for NAS to arrive]'
 	@echo '  6. make migrate            → Copy to NAS (run in tmux)'
-	@echo '  7. make verify             → Confirm 100% success'
+	@echo '  7. make verify-migration   → Check copied files in an approved NAS session'
 	@echo '  8. make index-catalog      → Build searchable database'
 	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
 	@echo ''
@@ -65,28 +70,40 @@ setup:
 
 .PHONY: check-volumes
 check-volumes:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(BLUE)Checking volumes...$(RESET)"
 	@test -d "$(SOURCE_VOLUME)" || (echo "$(RED)Source not found$(RESET)" && exit 1)
 	@echo "$(GREEN)Source OK: $(SOURCE_VOLUME)$(RESET)"
 
 .PHONY: analyze-dry
 analyze-dry: check-volumes
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results --dry-run
 
 .PHONY: analyze
 analyze: check-volumes
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 4-6 hours. Press Enter to continue...$(RESET)"
 	@read dummy
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results
 
 .PHONY: migrate
 migrate:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 8-12 hours. Press Enter to continue...$(RESET)"
 	@read dummy
 	$(PYTHON) -m media_toolkit.migrator --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
-.PHONY: verify
-verify:
+.PHONY: verify verify-source verify-migration
+# The owning source gate is offline. Never depend on a NAS operation here.
+verify: verify-source
+
+verify-source:
+	bash scripts/verify-source.sh
+
+# This legacy verifier is not an offline quality gate or permission to clean data.
+verify-migration:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.verifier --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
 .PHONY: clean
@@ -110,7 +127,7 @@ structure: ## Show project structure
 	@echo "${RESET}"
 
 .PHONY: aggregate
-aggregate: ## Aggregate text files from a directory (usage: make aggregate <directory>)
+aggregate: ## Usage: make aggregate AGGREGATE_TARGET=<directory>
 	@echo "${BLUE}Aggregating files from: ${AGGREGATE_TARGET}${RESET}"
 	@# Create the aggregate script in memory and execute it
 	@echo '#!/bin/bash' > .temp_aggregate.sh
@@ -289,20 +306,20 @@ add-paths: ## Add file paths as first-line comments to all Python files
 	@rm add_paths.py
 	@echo "${GREEN}✓ File paths added to all Python files${RESET}"
 
-# Dummy target for directory arguments to aggregate
-%:
-	@:
+# Unknown targets deliberately use make's failing default; no catch-all rule.
 
 .PHONY: index-catalog
 index-catalog:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.catalog index-sidecars \
-	  --catalog /Volumes/RodNAS/Media/Catalog/catalog.sqlite \
-	  --root /Volumes/RodNAS/Media
+	  --catalog $(TARGET_VOLUME)/Catalog/catalog.sqlite \
+	  --root $(TARGET_VOLUME)
 
 .PHONY: link-project
 link-project:
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.link_into_project \
-	  --root /Volumes/RodNAS/Media \
+	  --root $(TARGET_VOLUME) \
 	  --project $(PROJECT) \
 	  --shoot $(SHOOT) \
 	  --date $(DATE) \

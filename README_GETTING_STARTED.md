@@ -1,5 +1,21 @@
 # Getting Started Guide
 
+sow: dt-media-vault-SOW-01
+
+Legacy storage Make targets are disabled unconditionally, including with explicit
+roots or approval flags, and with prerequisites marked old using `make -o`.
+Each storage recipe refuses on its first line. Storage-volume defaults have been
+removed. The historical commands below are reference material; replacement tools need separate scope and
+review before any storage session.
+
+
+`make verify` now runs the offline source/design gate without media or NAS access.
+The historical migration workflow below requires separate operator approval.
+Its NAS check is `make verify-migration` and has known correctness limitations;
+see the [design memo](docs/design/sow-01-media-vault-design.md).
+Preserve all original NAS and backup content. No verification result authorizes
+deletion, moving or renaming, and duplicates are reported only.
+
 ## Prerequisites
 
 - **macOS** (tested on 15.4.1)
@@ -100,19 +116,19 @@ open analysis_results/duplicates_report.csv
 # 1. Connect NAS, verify it mounts at /Volumes/RodNAS
 
 # 2. Create folder structure
-make create-structure
+# No approved structure writer is available.
 
 # 3. Preview migration
-make migrate-dry
+# No migration preview target is available.
 
 # 4. Execute migration (in tmux!)
 tmux new-session -s migration
 make migrate
 
 # 5. Verify everything copied correctly
-make verify
+make verify-migration
 
-# 6. If verification passes 100%, you can clean the SSD
+# 6. Review independent restore evidence with the operator; preserve sources
 ```
 
 ## Troubleshooting
@@ -144,7 +160,7 @@ ffmpeg -version
 chmod +x scripts/*.sh
 
 # Or just use make commands (they handle this)
-make create-structure
+# No approved structure writer is available.
 ```
 
 ### Analysis is slow
@@ -172,7 +188,7 @@ Run in tmux/screen and let it run overnight.
 
 ### Verification Phase
 - **Time**: 2-4 hours
-- **Action**: Must pass 100% before cleaning source SSD
+- **Action**: Review independent restore evidence; preserve source content
 
 ## Common Questions
 
@@ -189,7 +205,8 @@ A: Expect 400-800GB from deduplication based on your archive.
 A: Yes! Edit the manifest JSON to only include certain files, or modify the Makefile `--batch-size` parameter.
 
 **Q: What if my NAS has a different path?**
-A: Edit the Makefile and change `TARGET_VOLUME := /Volumes/RodNAS/Media` to your actual path.
+A: Do not restore storage defaults or enable the legacy recipes. Replacement tools,
+exact selected roots and a separately approved storage session are required.
 
 ## Next Steps After Migration
 
