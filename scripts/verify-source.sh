@@ -31,7 +31,8 @@ ENV = dict(os.environ, LC_ALL="C", MAKEFLAGS="", MFLAGS="")
 
 def run(args, **kwargs):
     return subprocess.run(
-        args, capture_output=True, text=True, timeout=30, env=ENV, **kwargs
+        args, capture_output=True, text=True, timeout=30,
+        env=kwargs.pop("env", ENV), **kwargs
     )
 
 
@@ -106,6 +107,51 @@ def added_text(before, after):
     )
 
 
+def fixture_git_environment():
+    # Keep transport/policy settings; prevent inherited paths redirecting fixture writes.
+    locations = {"GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"}
+    return {key: value for key, value in ENV.items() if key not in locations}
+
+
+def check_commit_messages(baseline, head="HEAD", directory=None):
+    # Integration commits inherit SOW coverage; audit every non-merge on every side.
+    result = run(["git", "log", "--no-merges", "--format=%B%x00",
+                  baseline + ".." + head], cwd=directory,
+                 env=ENV if directory is None else fixture_git_environment())
+    require(result.returncode == 0, "cannot read source commits")
+    for message in filter(str.strip, result.stdout.split("\0")):
+        require(SOW in message.splitlines(), "commit missing standalone SOW line")
+
+
+def commit_graph_fixture(directory, side_message=None):
+    # Disposable local bare Git graph only; no hooks, remote or application execution.
+    environment = fixture_git_environment()
+    initialized = run(["git", "init", "--bare", "--quiet", str(directory)],
+                      env=environment)
+    require(initialized.returncode == 0, "cannot initialize commit fixture")
+    prefix = ["git", "-C", str(directory), "-c", "user.name=Gate Fixture",
+              "-c", "user.email=gate-fixture@example.invalid",
+              "-c", "commit.gpgSign=false"]
+    tree = run([*prefix, "mktree"], input="", env=environment)
+    require(tree.returncode == 0, "cannot create fixture tree")
+
+    def commit(message, *parents):
+        arguments = [*prefix, "commit-tree", tree.stdout.strip()]
+        for parent in parents:
+            arguments += ["-p", parent]
+        result = run(arguments, input=message + "\n", env=environment)
+        require(result.returncode == 0, "cannot create fixture commit")
+        return result.stdout.strip()
+
+    baseline = commit("fixture baseline excluded from audit")
+    left = commit("left implementation\n\n" + SOW, baseline)
+    right = commit("right implementation\n\n" + SOW
+                   if side_message is None else side_message, baseline)
+    merged = commit("GitHub-style merge without its own SOW line", left, right)
+    return baseline, merged, commit
+
+
 NAS_TARGETS = ("check-volumes", "analyze-dry", "analyze", "migrate",
                "verify-migration", "index-catalog", "link-project")
 
@@ -127,6 +173,29 @@ def assert_storage_refused(makefile, target, directory, make_options=()):
 
 
 class GateControls(unittest.TestCase):
+    def test_commit_sow_accepts_merge_with_covered_parents(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            baseline, merged, _commit = commit_graph_fixture(directory)
+            check_commit_messages(baseline, merged, directory)
+
+    def test_commit_sow_rejects_linear_missing_or_nonstandalone_line(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            baseline, merged, commit = commit_graph_fixture(directory)
+            for message in ("missing implementation reference", "prefix " + SOW):
+                with self.subTest(message=message), self.assertRaisesRegex(
+                        ValueError, "commit missing standalone SOW line"):
+                    check_commit_messages(baseline, commit(message, merged), directory)
+
+    def test_commit_sow_rejects_uncovered_second_parent_history(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            baseline, merged, _commit = commit_graph_fixture(
+                directory, "side implementation missing SOW")
+            with self.assertRaisesRegex(ValueError, "commit missing standalone SOW line"):
+                check_commit_messages(baseline, merged, directory)
+
     def test_python_valid_and_rejects_syntax(self):
         lint_python("def identity(value):\n    return value\n")
         with self.assertRaises(SyntaxError):
@@ -280,10 +349,7 @@ def main():
             check_document(sources[name], name, tracked)
     whitespace = run(["git", "diff", "--check", BASELINE, "HEAD"])
     require(whitespace.returncode == 0, "changed source whitespace")
-    commit = run(["git", "log", "--format=%B%x00", BASELINE + "..HEAD"])
-    require(commit.returncode == 0, "cannot read source commits")
-    for message in filter(str.strip, commit.stdout.split("\0")):
-        require(SOW in message.splitlines(), "commit missing standalone SOW line")
+    check_commit_messages(BASELINE)
 
     print("Python syntax/indentation, shell syntax, docs, SOW and finite privacy/scope checks passed.",
           flush=True)

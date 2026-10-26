@@ -364,3 +364,17 @@ removal nor the Make repair constitutes a full public-source scrub or product
 qualification. Missing structure/migration-preview Make commands are no longer
 presented as usable commands in the READMEs. Public role-name disclosure remains
 an Architect review decision; no infrastructure inventory is added.
+
+
+### Commit audit after integration
+
+Architect decision `ans_85e97300b0c3ba70` clarifies that integration commits with
+more than one parent inherit SOW coverage and need no separate SOW line. The
+offline gate audits every non-merge commit reachable since the original baseline,
+including commits on merged side branches; it does not use first-parent history.
+Every implementation commit still needs an exact standalone SOW line. No commit,
+parent, source tree or baseline is rewritten, and no historical SHA is exempted.
+Disposable bare Git graphs check that a merge with covered parents passes, a
+linear implementation with a missing or nonstandalone line fails, and an
+uncovered implementation on a second-parent history fails. These controls are
+source-policy checks, not C2 product or NAS qualification.
