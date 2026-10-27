@@ -294,6 +294,13 @@ acceptance. It never authorizes source cleanup.
 | Source publication | Full owning gate on exact commit HEAD, `DIRTY 0`, actual host, exit code and log SHA256 recorded before any new PR; publication restrictions remain binding. No PR event may start heavy CI. |
 | Completion | Council/operator receive and explicitly accept the reviewed memo and private annex. Receipt, a commit or a local check alone does not complete the SOW. |
 
+The before-product-implementation C2 condition above remains the whole-product
+qualification boundary. Architect ans_b363a376f80dd0a9 and issued SOW01 revision4
+explicitly allocate the bounded verifier error/coverage phase described below
+before that whole-C2 qualification is complete. This is a phase-specific source
+allocation, not a claim that the seven categories, Python pin or full-source scrub
+are met. Independent Council receiving and all broader product/NAS holds remain.
+
 At the inspected baseline there was no offline source gate; its `make verify`
 ran the NAS migration verifier. The Architect subsequently approved a finite
 same-SOW amendment: `make verify` now calls only `scripts/verify-source.sh`,
