@@ -121,14 +121,13 @@ class MigrationVerifier:
         console.print(f"[red]Missing: {self.missing_count:,}[/red]")
         console.print(f"[red]Corrupted: {self.corrupted_count:,}[/red]")
         
-        complete = (not self.errors and self.missing_count == 0 and
+        complete = (self.expected_count > 0 and not self.errors and self.missing_count == 0 and
                     self.corrupted_count == 0 and
                     self.verified_count == self.expected_count)
-        if complete:
-            if self.expected_count == 0:
-                console.print("\nEmpty manifest: no files checked.")
-            else:
-                console.print(f"\n[green]Verified all {self.expected_count} manifest entries.[/green]")
+        if self.expected_count == 0:
+            console.print("\nEmpty manifest: no files checked; verification incomplete.")
+        elif complete:
+            console.print(f"\n[green]Verified all {self.expected_count} manifest entries.[/green]")
         else:
             console.print("\n[bold red]Verification incomplete; preserve all source content.[/bold red]")
         return complete

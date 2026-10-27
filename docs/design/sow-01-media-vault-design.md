@@ -399,16 +399,29 @@ this explicit amendment adds local verifier tests, never a NAS or provider run.
 
 Read errors, missing/corrupt entries, malformed manifests and mismatched declared
 coverage return failure; the CLI exits nonzero. Every manifest entry is checked,
-including duplicate-labelled entries. Valid empty manifests say no files were
-checked. Successful verification reports only the number of verified manifest
+including duplicate-labelled entries. Empty manifests report that no files were checked and return failure; an
+absent root or empty input must never be presented as successful verification. Successful verification reports only the number of verified manifest
 entries and never grants cleanup authority. Outcome counters reset for each run.
 Basic selected-root/path/symlink refusals constrain the synthetic verifier cases;
 this is not qualification of race-free filesystem traversal or the relay protocol.
 
 The suite uses actual BLAKE3 for positive/corrupt fixture checks, deterministic
 read-error injection through the hash collaborator and an actual module subprocess
-for CLI status. Assertion-killed mutations restore the legacy success predicate,
-remove failed CLI propagation and filter duplicate entries. No dependency installs,
+for CLI status. Six assertion-killed mutations restore the legacy success predicate, remove
+failed CLI propagation, filter duplicate entries, accept empty manifests, accept
+absent roots and bypass declared coverage. No dependency installs,
 real inventories, NAS reads, media transfers or destructive storage operations run
 inside the gate. This fixes one C2 unit; other C2 categories, Python pinning, full
 tracked-source scrubbing and N9 relay qualification remain separate open holds.
+
+
+Council ruling 2026-10-27-dt-media-vault-pr3-C2-staged-exception-RULING.md
+(SHA256 62eb903c2ce3a067acd7cfda7f85473732ae276592d510c4c2222e3aad3c9317)
+subsequently grants the staged exception with X1-X5. Exactly the six actual changed
+paths are allowed; Makefile is unchanged. The gate retains the historical baseline
+scope/SOW controls and additionally checks this phase against canonical b3b2153,
+refusing Makefile or any other out-of-phase change. Empty manifests and absent
+roots fail, each with an assertion-killed mutant. The other C2 categories, Python
+3.12 pin and full tracked-file leak check remain blocking for copy/write/transfer;
+the C6 dependency review is explicitly not covered. Every final head needs the
+full gate before the Council's independent source verdict and normal integration.

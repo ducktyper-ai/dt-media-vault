@@ -70,6 +70,28 @@ class VerifierSafety(unittest.TestCase):
         result = self.invoke(module)
         self.assertNotEqual(result.exit_code, 0, result.output)
 
+    def assert_empty_rejected(self, module=verifier):
+        self.write_manifest([])
+        result = self.invoke(module)
+        self.assertNotEqual(result.exit_code, 0, result.output)
+        self.assertIn("Empty manifest: no files checked", result.output)
+        self.assertNotIn("Verified all", result.output)
+
+    def assert_absent_root_rejected(self, module=verifier):
+        absent = self.base / "absent"
+        subject = module.MigrationVerifier(self.manifest, absent)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(subject.verify())
+        self.assertFalse(absent.exists())
+
+    def assert_omission_rejected(self, module=verifier):
+        self.write_manifest()
+        data = json.loads(self.manifest.read_text())
+        data['total_files'] = 2
+        self.manifest.write_text(json.dumps(data))
+        result = self.invoke(module)
+        self.assertNotEqual(result.exit_code, 0, result.output)
+
     def assert_duplicate_coverage(self, module=verifier):
         second = self.root / "copy.bin"
         second.write_bytes(self.file.read_bytes())
@@ -142,21 +164,15 @@ class VerifierSafety(unittest.TestCase):
                 self.write_manifest([{"target_path": "clip.bin", "hash": digest}])
                 self.assertNotEqual(self.invoke().exit_code, 0)
 
-    def test_empty_manifest_is_explicitly_empty(self):
-        self.write_manifest([])
-        result = self.invoke()
-        self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("Empty manifest: no files checked", result.output)
-        self.assertNotIn("Verified all", result.output)
+    def test_empty_manifest_is_explicitly_incomplete(self):
+        self.assert_empty_rejected()
 
     def test_absent_or_nondirectory_root_is_not_created(self):
         absent = self.base / "absent"
         self.assertNotEqual(self.invoke(root=absent).exit_code, 0)
         self.assertFalse(absent.exists())
         self.assertNotEqual(self.invoke(root=self.file).exit_code, 0)
-        subject = verifier.MigrationVerifier(self.manifest, absent)
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertFalse(subject.verify())
+        self.assert_absent_root_rejected()
         alias = self.base / "root-alias"
         alias.symlink_to(self.root, target_is_directory=True)
         self.assertNotEqual(self.invoke(root=alias).exit_code, 0)
@@ -187,7 +203,7 @@ class VerifierSafety(unittest.TestCase):
 
     def test_mutations_are_assertion_killed(self):
         source = Path(verifier.__file__).read_text()
-        predicate = ("not self.errors and self.missing_count == 0 and\n"
+        predicate = ("self.expected_count > 0 and not self.errors and self.missing_count == 0 and\n"
                      "                    self.corrupted_count == 0 and\n"
                      "                    self.verified_count == self.expected_count")
         variants = (
@@ -198,6 +214,12 @@ class VerifierSafety(unittest.TestCase):
             ('# Duplicate classification is a report, never permission to omit coverage.',
              "files_to_verify = [f for f in files_to_verify if not f.get('is_duplicate', False)]",
              self.assert_duplicate_coverage),
+            ('self.expected_count > 0 and not self.errors', 'not self.errors',
+             self.assert_empty_rejected),
+            ('raise ValueError("target root must be an existing ordinary directory")',
+             'return True', self.assert_absent_root_rejected),
+            ('raise ValueError("manifest total_files does not match entry coverage")',
+             'pass', self.assert_omission_rejected),
         )
         for before, after, assertion in variants:
             with self.subTest(mutation=before):

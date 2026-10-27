@@ -23,6 +23,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
 BASELINE = "cf3bc5a48e108ed6f2a0a929a189b281bfc14ada"
+VERIFIER_PHASE_BASELINE = "b3b21531e7f372e41d9dc7ae4142724de04e1c28"
 SOW = "sow: dt-media-vault-SOW-01"
 MEMO = "docs/design/sow-01-media-vault-design.md"
 ROOT = Path.cwd()
@@ -96,6 +97,13 @@ def check_source_scope(names):
                "src/media_toolkit/verifier.py", "tests/test_verifier_safety.py"}
     require(set(names) <= allowed, "change outside finite design/gate/verifier scope")
     require(MEMO in names, "design memo missing from source slice")
+
+
+def check_verifier_phase_scope(names):
+    # Council X1: the historical baseline still includes Makefile, this phase cannot change it.
+    allowed = {MEMO, "scripts/verify-source.sh", "README.md", "README_GETTING_STARTED.md",
+               "src/media_toolkit/verifier.py", "tests/test_verifier_safety.py"}
+    require(set(names) <= allowed, "change outside Council six-path verifier exception")
 
 
 def added_text(before, after):
@@ -239,6 +247,11 @@ class GateControls(unittest.TestCase):
         check_source_scope([MEMO, "Makefile", "scripts/verify-source.sh"])
         check_source_scope([MEMO, "src/media_toolkit/verifier.py",
                             "tests/test_verifier_safety.py"])
+        check_verifier_phase_scope([MEMO, "src/media_toolkit/verifier.py",
+                                   "tests/test_verifier_safety.py"])
+        for name in ("Makefile", "src/media_toolkit/migrator.py", "pyproject.toml"):
+            with self.subTest(phase_path=name), self.assertRaises(ValueError):
+                check_verifier_phase_scope([MEMO, name])
         for name in ("src/media_toolkit/migrator.py", "pyproject.toml"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 check_source_scope([MEMO, name])
@@ -318,6 +331,9 @@ def main():
     require(changed_result.returncode == 0, "cannot compare source baseline")
     changed = set(filter(None, changed_result.stdout.split("\0")))
     check_source_scope(changed)
+    phase_result = run(["git", "diff", "--name-only", "-z", VERIFIER_PHASE_BASELINE, "HEAD"])
+    require(phase_result.returncode == 0, "cannot compare verifier phase baseline")
+    check_verifier_phase_scope(set(filter(None, phase_result.stdout.split("\0"))))
     require(changed <= tracked, "deleted source in finite design/gate slice")
     baseline_paths = run(["git", "ls-tree", "-r", "--name-only", "-z", BASELINE])
     require(baseline_paths.returncode == 0, "cannot enumerate baseline")
