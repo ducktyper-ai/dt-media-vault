@@ -5,6 +5,7 @@ Actual read-only verifier/CLI controls against disposable synthetic local files.
 import contextlib
 import io
 import json
+import os
 import stat
 import tempfile
 import types
@@ -38,8 +39,17 @@ class VerifierSafety(unittest.TestCase):
                                                 **fields)))
 
     def snapshot(self):
-        return {str(p.relative_to(self.base)): (p.read_bytes(), stat.S_IMODE(p.stat().st_mode))
-                for p in self.base.rglob("*") if p.is_file() and not p.is_symlink()}
+        entries = {}
+        for p in self.base.rglob("*"):
+            mode = stat.S_IMODE(p.lstat().st_mode)
+            if p.is_symlink():
+                value = ("symlink", os.readlink(p), mode)
+            elif p.is_dir():
+                value = ("directory", None, mode)
+            else:
+                value = ("file", p.read_bytes(), mode)
+            entries[str(p.relative_to(self.base))] = value
+        return entries
 
     def invoke(self, module=verifier, root=None):
         before = self.snapshot()
@@ -79,7 +89,6 @@ class VerifierSafety(unittest.TestCase):
         self.assertIn("Verified all 1 manifest entries", result.output)
 
     def test_actual_module_cli_subprocess(self):
-        import os
         import subprocess
         import sys
         before = self.snapshot()
@@ -145,6 +154,12 @@ class VerifierSafety(unittest.TestCase):
         self.assertNotEqual(self.invoke(root=absent).exit_code, 0)
         self.assertFalse(absent.exists())
         self.assertNotEqual(self.invoke(root=self.file).exit_code, 0)
+        subject = verifier.MigrationVerifier(self.manifest, absent)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(subject.verify())
+        alias = self.base / "root-alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.assertNotEqual(self.invoke(root=alias).exit_code, 0)
 
     def test_target_escape_symlink_directory_or_missing_field_refuses(self):
         outside = self.base / "outside.bin"
