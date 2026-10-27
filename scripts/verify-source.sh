@@ -1,6 +1,6 @@
 #!/bin/bash
 # sow: dt-media-vault-SOW-01
-# Offline owning gate for the design/source slice; never imports media_toolkit.
+# Offline owning gate: source controls plus synthetic local verifier safety tests.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
 
@@ -90,10 +90,11 @@ def check_public_artifact(name, text):
 
 
 def check_source_scope(names):
-    # Design-only SOW: product modules, dependencies and live NAS tooling stay intact.
+    # Exact amendment: verifier and its synthetic tests only; other product code stays intact.
     allowed = {MEMO, "Makefile", "scripts/verify-source.sh",
-               "README.md", "README_GETTING_STARTED.md"}
-    require(set(names) <= allowed, "change outside finite design/gate scope")
+               "README.md", "README_GETTING_STARTED.md",
+               "src/media_toolkit/verifier.py", "tests/test_verifier_safety.py"}
+    require(set(names) <= allowed, "change outside finite design/gate/verifier scope")
     require(MEMO in names, "design memo missing from source slice")
 
 
@@ -236,6 +237,8 @@ class GateControls(unittest.TestCase):
 
     def test_scope_rejects_product_or_dependency_changes(self):
         check_source_scope([MEMO, "Makefile", "scripts/verify-source.sh"])
+        check_source_scope([MEMO, "src/media_toolkit/verifier.py",
+                            "tests/test_verifier_safety.py"])
         for name in ("src/media_toolkit/migrator.py", "pyproject.toml"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 check_source_scope([MEMO, name])
@@ -365,10 +368,19 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(GateControls)
     require(unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful(),
             "positive/reject controls failed")
+    verifier_tests = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests",
+         "-p", "test_verifier_safety.py", "-v"],
+        env=dict(ENV, PYTHONPATH=str(ROOT / "src")),
+        capture_output=True, text=True, timeout=120,
+    )
+    print(verifier_tests.stdout, end="", flush=True)
+    print(verifier_tests.stderr, end="", flush=True)
+    require(verifier_tests.returncode == 0, "synthetic verifier safety controls failed")
     final_status = run(["git", "status", "--porcelain=v1"])
     require(final_status.returncode == 0 and not final_status.stdout,
             "gate changed source checkout")
-    print("PASS: full offline design/source gate. No application/NAS/provider execution.")
+    print("PASS: full offline source and synthetic verifier gate. No NAS/provider execution.")
 
 
 if __name__ == "__main__":

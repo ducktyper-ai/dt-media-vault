@@ -9,8 +9,9 @@ removed. The historical commands below are reference material; replacement tools
 review before any storage session.
 
 
-Maintainer status: `make verify` is the offline source/design gate. It runs lint
-and synthetic tests without accessing media or the NAS. The historical migration
+Maintainer status: `make verify` runs the offline source/design controls and
+the verifier safety suite on synthetic local files. It checks verifier failures,
+entry coverage and CLI status without accessing real media or the NAS. The historical migration
 workflow below requires separate operator approval; current migration and NAS
 verification have known safety defects documented in the
 [design memo](docs/design/sow-01-media-vault-design.md).

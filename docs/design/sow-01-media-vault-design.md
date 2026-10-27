@@ -378,3 +378,30 @@ Disposable bare Git graphs check that a merge with covered parents passes, a
 linear implementation with a missing or nonstandalone line fails, and an
 uncovered implementation on a second-parent history fails. These controls are
 source-policy checks, not C2 product or NAS qualification.
+
+
+## Verifier error and coverage amendment, 27 October 2026
+
+Architect ans_b363a376f80dd0a9 grants exactly existing verifier.py and new
+[test_verifier_safety.py](../../tests/test_verifier_safety.py), plus bounded gate
+and documentation changes in the original five paths. The full offline make verify
+now preserves all18 source controls and runs the actual verifier/Click CLI against
+synthetic local temporary files, using already available declared dependencies.
+The source-only no-application-import statement above describes the prior slice;
+this explicit amendment adds local verifier tests, never a NAS or provider run.
+
+Read errors, missing/corrupt entries, malformed manifests and mismatched declared
+coverage return failure; the CLI exits nonzero. Every manifest entry is checked,
+including duplicate-labelled entries. Valid empty manifests say no files were
+checked. Successful verification reports only the number of verified manifest
+entries and never grants cleanup authority. Outcome counters reset for each run.
+Basic selected-root/path/symlink refusals constrain the synthetic verifier cases;
+this is not qualification of race-free filesystem traversal or the relay protocol.
+
+The suite uses actual BLAKE3 for positive/corrupt fixture checks, deterministic
+read-error injection through the hash collaborator and an actual module subprocess
+for CLI status. Assertion-killed mutations restore the legacy success predicate,
+remove failed CLI propagation and filter duplicate entries. No dependency installs,
+real inventories, NAS reads, media transfers or destructive storage operations run
+inside the gate. This fixes one C2 unit; other C2 categories, Python pinning, full
+tracked-source scrubbing and N9 relay qualification remain separate open holds.
