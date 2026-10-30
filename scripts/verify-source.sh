@@ -1,6 +1,6 @@
 #!/bin/bash
 # sow: dt-media-vault-SOW-01
-# Offline owning gate for the design/source slice; never imports media_toolkit.
+# Offline owning gate: source controls plus synthetic local verifier safety tests.
 set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
 
@@ -23,6 +23,7 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
 BASELINE = "cf3bc5a48e108ed6f2a0a929a189b281bfc14ada"
+VERIFIER_PHASE_BASELINE = "b3b21531e7f372e41d9dc7ae4142724de04e1c28"
 SOW = "sow: dt-media-vault-SOW-01"
 MEMO = "docs/design/sow-01-media-vault-design.md"
 ROOT = Path.cwd()
@@ -90,11 +91,19 @@ def check_public_artifact(name, text):
 
 
 def check_source_scope(names):
-    # Design-only SOW: product modules, dependencies and live NAS tooling stay intact.
+    # Exact amendment: verifier and its synthetic tests only; other product code stays intact.
     allowed = {MEMO, "Makefile", "scripts/verify-source.sh",
-               "README.md", "README_GETTING_STARTED.md"}
-    require(set(names) <= allowed, "change outside finite design/gate scope")
+               "README.md", "README_GETTING_STARTED.md",
+               "src/media_toolkit/verifier.py", "tests/test_verifier_safety.py"}
+    require(set(names) <= allowed, "change outside finite design/gate/verifier scope")
     require(MEMO in names, "design memo missing from source slice")
+
+
+def check_verifier_phase_scope(names):
+    # Council X1: the historical baseline still includes Makefile, this phase cannot change it.
+    allowed = {MEMO, "scripts/verify-source.sh", "README.md", "README_GETTING_STARTED.md",
+               "src/media_toolkit/verifier.py", "tests/test_verifier_safety.py"}
+    require(set(names) <= allowed, "change outside Council six-path verifier exception")
 
 
 def added_text(before, after):
@@ -236,6 +245,13 @@ class GateControls(unittest.TestCase):
 
     def test_scope_rejects_product_or_dependency_changes(self):
         check_source_scope([MEMO, "Makefile", "scripts/verify-source.sh"])
+        check_source_scope([MEMO, "src/media_toolkit/verifier.py",
+                            "tests/test_verifier_safety.py"])
+        check_verifier_phase_scope([MEMO, "src/media_toolkit/verifier.py",
+                                   "tests/test_verifier_safety.py"])
+        for name in ("Makefile", "src/media_toolkit/migrator.py", "pyproject.toml"):
+            with self.subTest(phase_path=name), self.assertRaises(ValueError):
+                check_verifier_phase_scope([MEMO, name])
         for name in ("src/media_toolkit/migrator.py", "pyproject.toml"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 check_source_scope([MEMO, name])
@@ -315,6 +331,9 @@ def main():
     require(changed_result.returncode == 0, "cannot compare source baseline")
     changed = set(filter(None, changed_result.stdout.split("\0")))
     check_source_scope(changed)
+    phase_result = run(["git", "diff", "--name-only", "-z", VERIFIER_PHASE_BASELINE, "HEAD"])
+    require(phase_result.returncode == 0, "cannot compare verifier phase baseline")
+    check_verifier_phase_scope(set(filter(None, phase_result.stdout.split("\0"))))
     require(changed <= tracked, "deleted source in finite design/gate slice")
     baseline_paths = run(["git", "ls-tree", "-r", "--name-only", "-z", BASELINE])
     require(baseline_paths.returncode == 0, "cannot enumerate baseline")
@@ -365,10 +384,19 @@ def main():
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(GateControls)
     require(unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful(),
             "positive/reject controls failed")
+    verifier_tests = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests",
+         "-p", "test_verifier_safety.py", "-v"],
+        env=dict(ENV, PYTHONPATH=str(ROOT / "src")),
+        capture_output=True, text=True, timeout=120,
+    )
+    print(verifier_tests.stdout, end="", flush=True)
+    print(verifier_tests.stderr, end="", flush=True)
+    require(verifier_tests.returncode == 0, "synthetic verifier safety controls failed")
     final_status = run(["git", "status", "--porcelain=v1"])
     require(final_status.returncode == 0 and not final_status.stdout,
             "gate changed source checkout")
-    print("PASS: full offline design/source gate. No application/NAS/provider execution.")
+    print("PASS: full offline source and synthetic verifier gate. No NAS/provider execution.")
 
 
 if __name__ == "__main__":

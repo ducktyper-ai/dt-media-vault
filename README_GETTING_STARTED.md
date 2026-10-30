@@ -9,7 +9,9 @@ removed. The historical commands below are reference material; replacement tools
 review before any storage session.
 
 
-`make verify` now runs the offline source/design gate without media or NAS access.
+`make verify` runs offline source/design controls and verifier safety tests on
+synthetic local files, without real media or NAS access. The existing declared
+BLAKE3, Rich and Click dependencies must be available; the gate installs nothing.
 The historical migration workflow below requires separate operator approval.
 Its NAS check is `make verify-migration` and has known correctness limitations;
 see the [design memo](docs/design/sow-01-media-vault-design.md).

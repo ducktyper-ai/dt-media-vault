@@ -294,6 +294,13 @@ acceptance. It never authorizes source cleanup.
 | Source publication | Full owning gate on exact commit HEAD, `DIRTY 0`, actual host, exit code and log SHA256 recorded before any new PR; publication restrictions remain binding. No PR event may start heavy CI. |
 | Completion | Council/operator receive and explicitly accept the reviewed memo and private annex. Receipt, a commit or a local check alone does not complete the SOW. |
 
+The before-product-implementation C2 condition above remains the whole-product
+qualification boundary. Architect ans_b363a376f80dd0a9 and issued SOW01 revision4
+explicitly allocate the bounded verifier error/coverage phase described below
+before that whole-C2 qualification is complete. This is a phase-specific source
+allocation, not a claim that the seven categories, Python pin or full-source scrub
+are met. Independent Council receiving and all broader product/NAS holds remain.
+
 At the inspected baseline there was no offline source gate; its `make verify`
 ran the NAS migration verifier. The Architect subsequently approved a finite
 same-SOW amendment: `make verify` now calls only `scripts/verify-source.sh`,
@@ -378,3 +385,43 @@ Disposable bare Git graphs check that a merge with covered parents passes, a
 linear implementation with a missing or nonstandalone line fails, and an
 uncovered implementation on a second-parent history fails. These controls are
 source-policy checks, not C2 product or NAS qualification.
+
+
+## Verifier error and coverage amendment, 27 October 2026
+
+Architect ans_b363a376f80dd0a9 grants exactly existing verifier.py and new
+[test_verifier_safety.py](../../tests/test_verifier_safety.py), plus bounded gate
+and documentation changes in the original five paths. The full offline make verify
+now preserves all18 source controls and runs the actual verifier/Click CLI against
+synthetic local temporary files, using already available declared dependencies.
+The source-only no-application-import statement above describes the prior slice;
+this explicit amendment adds local verifier tests, never a NAS or provider run.
+
+Read errors, missing/corrupt entries, malformed manifests and mismatched declared
+coverage return failure; the CLI exits nonzero. Every manifest entry is checked,
+including duplicate-labelled entries. Empty manifests report that no files were checked and return failure; an
+absent root or empty input must never be presented as successful verification. Successful verification reports only the number of verified manifest
+entries and never grants cleanup authority. Outcome counters reset for each run.
+Basic selected-root/path/symlink refusals constrain the synthetic verifier cases;
+this is not qualification of race-free filesystem traversal or the relay protocol.
+
+The suite uses actual BLAKE3 for positive/corrupt fixture checks, deterministic
+read-error injection through the hash collaborator and an actual module subprocess
+for CLI status. Six assertion-killed mutations restore the legacy success predicate, remove
+failed CLI propagation, filter duplicate entries, accept empty manifests, accept
+absent roots and bypass declared coverage. No dependency installs,
+real inventories, NAS reads, media transfers or destructive storage operations run
+inside the gate. This fixes one C2 unit; other C2 categories, Python pinning, full
+tracked-source scrubbing and N9 relay qualification remain separate open holds.
+
+
+Council ruling 2026-10-27-dt-media-vault-pr3-C2-staged-exception-RULING.md
+(SHA256 62eb903c2ce3a067acd7cfda7f85473732ae276592d510c4c2222e3aad3c9317)
+subsequently grants the staged exception with X1-X5. Exactly the six actual changed
+paths are allowed; Makefile is unchanged. The gate retains the historical baseline
+scope/SOW controls and additionally checks this phase against canonical b3b2153,
+refusing Makefile or any other out-of-phase change. Empty manifests and absent
+roots fail, each with an assertion-killed mutant. The other C2 categories, Python
+3.12 pin and full tracked-file leak check remain blocking for copy/write/transfer;
+the C6 dependency review is explicitly not covered. Every final head needs the
+full gate before the Council's independent source verdict and normal integration.
