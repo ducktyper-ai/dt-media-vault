@@ -14,7 +14,7 @@ synthetic local files, without real media or NAS access. The existing declared
 BLAKE3, Rich and Click dependencies must be available; the gate installs nothing.
 The historical migration workflow below requires separate operator approval.
 Its NAS check is `make verify-migration` and has known correctness limitations;
-see the [design memo](docs/design/sow-01-media-vault-design.md).
+see the [historical design record](docs/evidence/INDEX.json).
 Preserve all original NAS and backup content. No verification result authorizes
 deletion, moving or renaming, and duplicates are reported only.
 

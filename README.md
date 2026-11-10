@@ -14,7 +14,7 @@ the verifier safety suite on synthetic local files. It checks verifier failures,
 entry coverage and CLI status without accessing real media or the NAS. The historical migration
 workflow below requires separate operator approval; current migration and NAS
 verification have known safety defects documented in the
-[design memo](docs/design/sow-01-media-vault-design.md).
+[historical design record](docs/evidence/INDEX.json).
 Keep original NAS and backup content intact. Duplicates are reported only;
 passing a source gate or migration check never authorizes cleanup.
 
