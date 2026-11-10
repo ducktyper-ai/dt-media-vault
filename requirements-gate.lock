@@ -1,0 +1,11 @@
+# Gate-only dependency lock.
+# Target: CPython 3.14, macOS arm64. Binary wheels only.
+# Runtime: pip install --require-hashes --only-binary=:all: -r requirements-gate.lock
+# Satisfies approved-base pyproject lower bounds; excludes project/build extras.
+blake3==1.0.11 --hash=sha256:235bbfdd1dd3b0bf82aee8de8df01c55ade5648daf978d41527763786d3b5aa8
+click==8.5.1 --hash=sha256:8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37
+markdown-it-py==4.2.0 --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
+mdurl==0.1.2 --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
+pygments==2.21.0 --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
+rich==15.0.0 --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb
+ruff==0.17.4 --hash=sha256:7ed2f416349944f908f9574215994602242b0836844eba48eec61473033afca0
