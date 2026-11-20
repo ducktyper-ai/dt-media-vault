@@ -156,6 +156,12 @@ def check_lock_phase(names, payload):
             "lock phase SHA256 mismatch")
 
 
+def check_dependency_amendment(before, after):
+    require(before.count('"ruff>=0.2.0"') == 1, "dependency baseline pin missing")
+    require(after == before.replace('"ruff>=0.2.0"', '"ruff==0.17.4"'),
+            "dependency change outside exact Ruff pin")
+
+
 def check_universal_document(value):
     packages = value.get("package", [])
     require(bool(packages), "universal lock packages missing")
@@ -523,6 +529,15 @@ class UniversalLockControls(unittest.TestCase):
     def document(self):
         return tomllib.loads((ROOT / "uv.lock").read_text())
 
+    def test_dependency_amendment_is_exact_ruff_pin_only(self):
+        before = 'dev = ["ruff>=0.2.0"]\n'
+        accepted = 'dev = ["ruff==0.17.4"]\n'
+        check_dependency_amendment(before, accepted)
+        for other in (before, accepted + 'runtime = ["unapproved"]\n'):
+            with self.subTest(other=other), self.assertRaisesRegex(ValueError,
+                                                               "dependency change"):
+                check_dependency_amendment(before, other)
+
     def test_universal_lock_and_export_exact_identity(self):
         check_universal_payloads((ROOT / "uv.lock").read_bytes(),
                                  (ROOT / "requirements-gate-universal.lock").read_bytes())
@@ -674,6 +689,10 @@ def main():
             sources[name] = current.read_text(encoding="utf-8")
 
     check_memo_index((ROOT / INDEX).read_text(encoding="utf-8"))
+    dependency_baseline = run(["git", "show", MAKEFILE_BASELINE + ":pyproject.toml"])
+    require(dependency_baseline.returncode == 0, "cannot read dependency baseline")
+    check_dependency_amendment(dependency_baseline.stdout,
+                               (ROOT / "pyproject.toml").read_text())
     check_universal_payloads((ROOT / "uv.lock").read_bytes(),
                              (ROOT / "requirements-gate-universal.lock").read_bytes())
 
@@ -708,6 +727,9 @@ def main():
     print(fatal_lint.stdout, end="", flush=True)
     require(fatal_lint.returncode == 0, "fatal Python lint failed: " + fatal_lint.stderr)
 
+    mypy_version = run(["mypy", "--version"])
+    require(mypy_version.returncode == 0 and mypy_version.stdout.split()[:2]
+            == ["mypy", "2.4.1"], "mypy differs from universal lock pin")
     typed = run(["mypy", "--follow-imports=skip", "scripts/devtools.py"])
     print(typed.stdout, end="", flush=True)
     require(typed.returncode == 0, "developer entry point type check failed: " + typed.stderr)
