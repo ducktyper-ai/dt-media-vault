@@ -2,6 +2,10 @@
 # sow: dt-media-vault-SOW-01
 # Offline owning gate: source controls plus synthetic local verifier safety tests.
 set -euo pipefail
+if [ "$(uname -s)" = Darwin ]; then
+    echo "REFUSED: run make verify on an authorized build host, not the Mac mini." >&2
+    exit 1
+fi
 cd -- "$(dirname -- "$0")/.."
 
 export PYTHONDONTWRITEBYTECODE=1
@@ -37,6 +41,7 @@ LOCK_SHA256 = "321934de86581ce858defa66c9fa9af70ba48a23eb687bf3524b006a5366da4e"
 LOCK_PRIMARY_COMMIT = "73fd96105173fa2b90c626127a0c1ebd84687909"
 # Bind only after actual reviewed PR4 merge and immutable source readback.
 LOCK_PHASE_BASELINE = "9093d47ae0e07f628385dc1ebf3e696b922f6204"
+MAKEFILE_BASELINE = "aeab77f8ca571ddf6a84557f1fa8decccdbe8d01"
 MEMO = "docs/design/sow-01-media-vault-design.md"
 INDEX = "docs/evidence/INDEX.json"
 ARCHIVE_BYTES = 30132
@@ -128,6 +133,16 @@ def check_cleanup_scope(names):
     require(set(names) <= allowed, "change outside approved cleanup phase")
     require(MEMO in names, "approved memo removal missing")
     require(set(names) == allowed, "cleanup must include the complete approved path set")
+
+
+def check_makefile_scope(names):
+    # November20 operator directive: developer entry points only, no storage product changes.
+    allowed = {"Makefile", "README.md", "README_GETTING_STARTED.md",
+               "scripts/verify-source.sh", "scripts/devtools.py", "scripts/pre-push.sh",
+               "tests/test_devtools.py"}
+    require(set(names) <= allowed, "change outside Makefile compliance phase")
+    require({"Makefile", "scripts/devtools.py", "scripts/pre-push.sh"} <= set(names),
+            "incomplete Makefile compliance phase")
 
 
 def check_lock_phase(names, payload):
@@ -369,8 +384,8 @@ class GateControls(unittest.TestCase):
         guard = "\t$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)\n"
         for target in NAS_TARGETS:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
-                header = target + (": check-volumes\n" if target in {"analyze", "analyze-dry"}
-                                   else ":\n")
+                header = next(line + "\n" for line in original.splitlines()
+                              if line.startswith(target + ":"))
                 self.assertEqual(original.count(header + guard), 1)
                 mutant = original.replace(header + guard, header, 1)
                 directory = Path(temporary)
@@ -555,9 +570,14 @@ def main():
     require(lock_blob.returncode == 0, "cannot read merged lock blob")
     check_lock_phase(set(filter(None, lock_paths.stdout.split("\0"))), lock_blob.stdout)
     check_lock_commit_messages(CLEANUP_BASELINE, LOCK_PHASE_BASELINE)
-    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, "HEAD"])
+    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, MAKEFILE_BASELINE])
     require(cleanup.returncode == 0, "cannot compare cleanup phase baseline")
     check_cleanup_scope(set(filter(None, cleanup.stdout.split("\0"))))
+    require(run(["git", "merge-base", "--is-ancestor", MAKEFILE_BASELINE,
+                 "HEAD"]).returncode == 0, "Makefile phase ancestry mismatch")
+    current = run(["git", "diff", "--name-only", "-z", MAKEFILE_BASELINE, "HEAD"])
+    require(current.returncode == 0, "cannot compare Makefile phase")
+    check_makefile_scope(set(filter(None, current.stdout.split("\0"))))
     require(MEMO not in tracked, "archived memo still tracked")
     require(INDEX in tracked, "archive index is not tracked")
     require(changed <= tracked | {MEMO}, "deleted source outside archived memo")
@@ -610,6 +630,10 @@ def main():
     print(fatal_lint.stdout, end="", flush=True)
     require(fatal_lint.returncode == 0, "fatal Python lint failed: " + fatal_lint.stderr)
 
+    typed = run(["mypy", "--follow-imports=skip", "scripts/devtools.py"])
+    print(typed.stdout, end="", flush=True)
+    require(typed.returncode == 0, "developer entry point type check failed: " + typed.stderr)
+
     suite = unittest.TestSuite([
         unittest.defaultTestLoader.loadTestsFromTestCase(GateControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(CleanupControls),
@@ -621,7 +645,7 @@ def main():
             "positive/reject controls failed")
     verifier_tests = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests",
-         "-p", "test_verifier_safety.py", "-v"],
+         "-p", "test_*.py", "-v"],
         env=dict(ENV, PYTHONPATH=str(ROOT / "src")),
         capture_output=True, text=True, timeout=120,
     )

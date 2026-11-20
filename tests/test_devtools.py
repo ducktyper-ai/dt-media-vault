@@ -1,0 +1,98 @@
+"""Synthetic hook and diagnostics checks; no push, media, or network."""
+# sow: public
+import importlib.util
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("devtools", ROOT / "scripts/devtools.py")
+TOOLS = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(TOOLS)
+
+
+class HookControls(unittest.TestCase):
+    def invoke(self, directory, updates):
+        hook = directory / "pre-push"
+        hook.write_bytes((ROOT / "scripts/pre-push.sh").read_bytes())
+        return subprocess.run(["sh", str(hook), "origin", "synthetic"], input=updates,
+                              capture_output=True, text=True, check=False)
+
+    def test_refuses_main_update_and_delete_and_mixed_push(self):
+        for update in ("refs/heads/work abc refs/heads/main def\n",
+                       "(delete) 000 refs/heads/main def\n",
+                       "refs/heads/work abc refs/heads/work def\n"
+                       "refs/heads/other abc refs/heads/main def\n"):
+            with self.subTest(update=update), tempfile.TemporaryDirectory() as tmp:
+                result = self.invoke(Path(tmp), update)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("REFUSED", result.stderr)
+
+    def test_feature_push_chains_previous_hook_with_updates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            previous = directory / "pre-push.media-vault-previous"
+            previous.write_text('#!/bin/sh\ncat > "$(dirname "$0")/seen"\nexit 23\n')
+            previous.chmod(0o755)
+            updates = "refs/heads/work abc refs/heads/work def\n"
+            result = self.invoke(directory, updates)
+            self.assertEqual(result.returncode, 23)
+            self.assertEqual((directory / "seen").read_text(), updates)
+
+    def test_rejected_push_does_not_call_previous(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            previous = directory / "pre-push.media-vault-previous"
+            previous.write_text('#!/bin/sh\ntouch "$(dirname "$0")/called"\n')
+            previous.chmod(0o755)
+            self.invoke(directory, "refs/heads/work abc refs/heads/main def\n")
+            self.assertFalse((directory / "called").exists())
+
+    def test_installer_preserves_hook_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hook = Path(tmp) / "hooks/pre-push"
+            hook.parent.mkdir()
+            original = b"#!/bin/sh\nexit 23\n"
+            hook.write_bytes(original)
+            hook.chmod(0o755)
+            with patch.object(TOOLS, "hook_location", return_value=hook):
+                self.assertEqual(TOOLS.hooks(), 0)
+                self.assertEqual(TOOLS.hooks(), 0)
+            self.assertEqual(hook.with_name("pre-push.media-vault-previous").read_bytes(), original)
+
+    def test_installer_refuses_existing_backup_without_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hook = Path(tmp) / "pre-push"
+            backup = hook.with_name("pre-push.media-vault-previous")
+            backup.write_bytes(b"held")
+            with patch.object(TOOLS, "hook_location", return_value=hook):
+                with self.assertRaisesRegex(RuntimeError, "refusing"):
+                    TOOLS.hooks()
+            self.assertEqual(backup.read_bytes(), b"held")
+            self.assertFalse(hook.exists())
+
+    def test_custom_hook_location_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            common = Path(tmp) / "git"
+            custom = Path(tmp) / "custom/pre-push"
+            with patch.object(TOOLS, "git", side_effect=[str(common), str(custom)]):
+                with self.assertRaisesRegex(RuntimeError, "custom core.hooksPath"):
+                    TOOLS.hook_location()
+
+    def test_scope_rejects_product_or_lock_changes(self):
+        # The full gate itself exercises phase checks; these inputs must remain out of scope.
+        text = (ROOT / "scripts/verify-source.sh").read_text()
+        section = text.split("def check_makefile_scope(names):", 1)[1].split("def check_lock_phase", 1)[0]
+        namespace = {"require": lambda ok, reason: None if ok else (_ for _ in ()).throw(ValueError(reason))}
+        exec("def check_makefile_scope(names):" + section, namespace)
+        required = {"Makefile", "scripts/devtools.py", "scripts/pre-push.sh"}
+        namespace["check_makefile_scope"](required)
+        for extra in ("src/media_toolkit/migrator.py", "requirements-gate.lock", "pyproject.toml"):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                namespace["check_makefile_scope"](required | {extra})
+
+
+if __name__ == "__main__":
+    unittest.main()
