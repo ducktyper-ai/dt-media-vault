@@ -49,17 +49,17 @@ def hooks() -> int:
     destination = hook_location()
     payload = (ROOT / "scripts/pre-push.sh").read_bytes()
     previous = destination.with_name("pre-push.media-vault-previous")
-    if destination.exists() and destination.read_bytes() == payload:
-        if not os.access(destination, os.X_OK):
-            raise RuntimeError("existing guard is not executable; owner must repair it")
-        print("PASS main-push guard already installed")
-        return 0
     if previous.exists() or previous.is_symlink():
-        raise RuntimeError("saved previous hook exists; refusing to overwrite hook chain")
-    if destination.exists() and not destination.is_file():
-        raise RuntimeError("existing hook is not a regular file")
-    if destination.exists() and not os.access(destination, os.X_OK):
-        raise RuntimeError("existing nonexecutable hook; owner must resolve it first")
+        raise RuntimeError("saved previous hook exists; refusing automatic execution; owner must resolve it")
+    if destination.is_symlink():
+        raise RuntimeError("symlink hook; owner must resolve it")
+    if destination.exists():
+        if destination.is_file() and destination.read_bytes() == payload:
+            if not os.access(destination, os.X_OK):
+                raise RuntimeError("existing guard is not executable; owner must repair it")
+            print("PASS main-push guard already installed")
+            return 0
+        raise RuntimeError("existing hook; ask its owner for approved lightweight integration")
     destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".media-vault-hook-", dir=destination.parent)
     staged = Path(temporary)
@@ -67,18 +67,12 @@ def hooks() -> int:
         with os.fdopen(descriptor, "wb") as output:
             output.write(payload)
         staged.chmod(0o755)
-        if destination.exists():
-            destination.rename(previous)
-        try:
-            staged.replace(destination)
-        except OSError:
-            if previous.exists() and not destination.exists():
-                previous.rename(destination)
-            raise
+        # Hard-link publication is exclusive: EEXIST preserves a concurrent file or symlink.
+        # Never rename, replace, or remove the destination or another owner's backup.
+        os.link(staged, destination)
     finally:
-        if staged.exists():
-            staged.unlink()
-    print("PASS installed main-push guard; previous executable hook preserved and chained")
+        staged.unlink()
+    print("PASS installed standalone main-push guard; no other hook executed or replaced")
     return 0
 
 
@@ -143,7 +137,9 @@ def doctor() -> int:
     print("INFO build/test/gate execution is forbidden on the Mac mini")
     try:
         active = hook_location()
+        previous = active.with_name("pre-push.media-vault-previous")
         installed = (active.is_file() and os.access(active, os.X_OK)
+                     and not previous.exists() and not previous.is_symlink()
                      and active.read_bytes() == (ROOT / "scripts/pre-push.sh").read_bytes())
         report(installed, "main-push guard installed", "run make hooks; never replace other owners' hooks")
     except RuntimeError as error:

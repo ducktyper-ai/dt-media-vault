@@ -15,6 +15,7 @@ while read -r local_ref local_oid remote_ref remote_oid ||
     fi
 done < "$updates"
 previous="$(dirname -- "$0")/pre-push.media-vault-previous"
-if [ -x "$previous" ]; then
-    "$previous" "$@" < "$updates"
+if [ -e "$previous" ] || [ -L "$previous" ]; then
+    echo 'REFUSED: saved prior hook needs owner-approved lightweight integration.' >&2
+    exit 1
 fi

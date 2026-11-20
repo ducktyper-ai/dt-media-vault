@@ -34,7 +34,7 @@ help-all: ## List every target, including disabled legacy workflows
 doctor: ## Diagnose tools, lock identity, environment names, and hooks without changes
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/devtools.py doctor
 
-hooks: ## Install a main-push refusal, preserving an existing standard pre-push hook
+hooks: ## Install a standalone main-push refusal; refuse existing hooks
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/devtools.py hooks
 
 require-build-host: ## Refuse build, setup, and checks on the Mac mini

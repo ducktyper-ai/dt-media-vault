@@ -7,8 +7,9 @@ Start with `make help` for the five-command first-time guide and `make help-all`
 for every target. `make doctor` reports prerequisites and the main-push hook
 without installing anything, printing environment values, or accessing media.
 Run `make hooks` to install lightweight protection against all pushes to `main`;
-an existing executable standard pre-push hook is preserved and chained. Custom
-hook locations require their owner's integration; they are never overwritten.
+an existing hook or saved prior hook causes refusal without changing or executing it.
+Custom hook locations require their owner's approved lightweight integration.
+Installation publishes exclusively and never overwrites a concurrently created hook.
 
 `make setup` uses an existing Python 3.12 on an authorized build host and installs
 only binary wheels matching `requirements-gate-universal.lock`, exported from

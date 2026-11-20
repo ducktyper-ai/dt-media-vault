@@ -36,36 +36,26 @@ class HookControls(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("REFUSED", result.stderr)
 
-    def test_feature_push_chains_previous_hook_with_updates(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            directory = Path(tmp)
-            previous = directory / "pre-push.media-vault-previous"
-            previous.write_text('#!/bin/sh\ncat > "$(dirname "$0")/seen"\nexit 23\n')
-            previous.chmod(0o755)
-            updates = "refs/heads/work abc refs/heads/work def\n"
-            result = self.invoke(directory, updates)
-            self.assertEqual(result.returncode, 23)
-            self.assertEqual((directory / "seen").read_text(), updates)
-
-    def test_prior_hook_receives_exact_empty_trailing_input_and_arguments(self):
-        cases = ("", "\n", "refs/heads/work abc refs/heads/work def",
-                 "refs/heads/work abc refs/heads/work def\n\n")
-        arguments = ("origin with space", "synthetic endpoint")
-        for updates in cases:
+    def test_prior_hook_is_never_executed(self):
+        for updates in ("", "\n", "refs/heads/work abc refs/heads/work def",
+                        "refs/heads/work abc refs/heads/work def\n\n"):
             with self.subTest(updates=updates), tempfile.TemporaryDirectory() as tmp:
                 directory = Path(tmp)
                 previous = directory / "pre-push.media-vault-previous"
-                previous.write_text(
-                    '#!/bin/sh\nprintf "%s\\000" "$@" > "$(dirname "$0")/argv"\n'
-                    'cat > "$(dirname "$0")/seen"\nexit 23\n'
-                )
+                original = b'#!/bin/sh\ntouch "$(dirname "$0")/called"\nexit 23\n'
+                previous.write_bytes(original)
                 previous.chmod(0o755)
-                result = self.invoke(directory, updates, arguments)
-                self.assertEqual(result.returncode, 23)
-                self.assertEqual((directory / "seen").read_bytes(), updates.encode())
-                self.assertEqual((directory / "argv").read_bytes(),
-                                 b"origin with space\0synthetic endpoint\0")
+                result = self.invoke(directory, updates, ("origin with space", "synthetic endpoint"))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("owner-approved", result.stderr)
+                self.assertFalse((directory / "called").exists())
+                self.assertEqual(previous.read_bytes(), original)
                 self.assertEqual(list(directory.glob("dt-media-vault-pre-push.*")), [])
+
+    def test_standalone_feature_push_is_lightweight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self.invoke(Path(tmp), "refs/heads/work abc refs/heads/work def\n")
+            self.assertEqual(result.returncode, 0)
 
     def test_rejected_push_does_not_call_previous(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,17 +66,56 @@ class HookControls(unittest.TestCase):
             self.invoke(directory, "refs/heads/work abc refs/heads/main def\n")
             self.assertFalse((directory / "called").exists())
 
-    def test_installer_preserves_hook_and_is_idempotent(self):
+    def test_installer_refuses_unknown_existing_hook_without_changes(self):
+        for mode in (0o644, 0o755):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                hook = Path(tmp) / "hooks/pre-push"
+                hook.parent.mkdir()
+                original = b"#!/bin/sh\nexit 23\n"
+                hook.write_bytes(original)
+                hook.chmod(mode)
+                with patch.object(TOOLS, "hook_location", return_value=hook):
+                    with self.assertRaisesRegex(RuntimeError, "existing hook"):
+                        TOOLS.hooks()
+                self.assertEqual(hook.read_bytes(), original)
+                self.assertEqual(hook.stat().st_mode & 0o777, mode)
+                self.assertFalse(hook.with_name("pre-push.media-vault-previous").exists())
+
+    def test_installer_is_idempotent_when_it_owns_the_guard(self):
         with tempfile.TemporaryDirectory() as tmp:
             hook = Path(tmp) / "hooks/pre-push"
-            hook.parent.mkdir()
-            original = b"#!/bin/sh\nexit 23\n"
-            hook.write_bytes(original)
-            hook.chmod(0o755)
             with patch.object(TOOLS, "hook_location", return_value=hook):
                 self.assertEqual(TOOLS.hooks(), 0)
+                first = hook.stat().st_ino
                 self.assertEqual(TOOLS.hooks(), 0)
-            self.assertEqual(hook.with_name("pre-push.media-vault-previous").read_bytes(), original)
+            self.assertEqual(hook.stat().st_ino, first)
+            self.assertEqual(hook.read_bytes(), (ROOT / "scripts/pre-push.sh").read_bytes())
+
+    def test_concurrent_publication_preserves_other_hook(self):
+        for symlink in (False, True):
+            with self.subTest(symlink=symlink), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                hook = directory / "hooks/pre-push"
+                target = directory / "held"
+                target.write_bytes(b"held foreign hook")
+                link = os.link
+
+                def race(source, destination):
+                    if symlink:
+                        Path(destination).symlink_to(target)
+                    else:
+                        Path(destination).write_bytes(b"concurrent foreign hook")
+                    link(source, destination)
+
+                with patch.object(TOOLS, "hook_location", return_value=hook), \
+                        patch.object(TOOLS.os, "link", side_effect=race):
+                    with self.assertRaises(FileExistsError):
+                        TOOLS.hooks()
+                self.assertEqual(hook.read_bytes(), b"held foreign hook" if symlink
+                                 else b"concurrent foreign hook")
+                self.assertEqual(hook.is_symlink(), symlink)
+                self.assertEqual(target.read_bytes(), b"held foreign hook")
+                self.assertEqual(list(hook.parent.glob(".media-vault-hook-*")), [])
 
     def test_installer_refuses_existing_backup_without_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
