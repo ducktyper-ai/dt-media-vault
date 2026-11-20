@@ -122,6 +122,9 @@ def doctor() -> int:
         padded = numeric + (0,) * (3 - len(numeric))
         report(bool(stable) and padded >= minimum, package + " metadata " + installed_version,
                "select the declared minimum or reconcile a nonstable version explicitly")
+    for utility in ("sh", "cat", "mktemp", "rm"):
+        report(shutil.which(utility) is not None, utility + " hook prerequisite",
+               "restore the host shell utilities before installing the hook")
     payload = (ROOT / "requirements-gate.lock").read_bytes()
     report(len(payload) == 912 and hashlib.sha256(payload).hexdigest() == LOCK_SHA256,
            "original gate lock identity", "restore the reviewed lock; never regenerate it implicitly")
@@ -134,7 +137,7 @@ def doctor() -> int:
                name + " identity", "restore the reviewed universal lock and matching export")
     print("INFO historical lock retained; universal lock/export includes runtime and dev closure")
     print("INFO setup selects existing Python 3.12; no interpreter download or source build")
-    print("INFO environment names: PATH selects tools; SOURCE_VOLUME and TARGET_VOLUME are not needed")
+    print("INFO environment names: PATH selects tools; TMPDIR is optional; SOURCE_VOLUME and TARGET_VOLUME are not needed")
     print("INFO offline gate needs no media root, mounted volume, service, or network")
     print("INFO dependency acquisition needs package-index access only during explicit setup")
     print("INFO build/test/gate execution is forbidden on the Mac mini")

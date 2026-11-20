@@ -18,14 +18,16 @@ SPEC.loader.exec_module(TOOLS)
 
 
 class HookControls(unittest.TestCase):
-    def invoke(self, directory, updates):
+    def invoke(self, directory, updates, arguments=("origin", "synthetic")):
         hook = directory / "pre-push"
         hook.write_bytes((ROOT / "scripts/pre-push.sh").read_bytes())
-        return subprocess.run(["sh", str(hook), "origin", "synthetic"], input=updates,
-                              capture_output=True, text=True, check=False)
+        return subprocess.run(["sh", str(hook), *arguments], input=updates,
+                              capture_output=True, text=True, check=False,
+                              env=dict(os.environ, TMPDIR=str(directory)))
 
     def test_refuses_main_update_and_delete_and_mixed_push(self):
         for update in ("refs/heads/work abc refs/heads/main def\n",
+                       "refs/heads/work abc refs/heads/main def",
                        "(delete) 000 refs/heads/main def\n",
                        "refs/heads/work abc refs/heads/work def\n"
                        "refs/heads/other abc refs/heads/main def\n"):
@@ -44,6 +46,26 @@ class HookControls(unittest.TestCase):
             result = self.invoke(directory, updates)
             self.assertEqual(result.returncode, 23)
             self.assertEqual((directory / "seen").read_text(), updates)
+
+    def test_prior_hook_receives_exact_empty_trailing_input_and_arguments(self):
+        cases = ("", "\n", "refs/heads/work abc refs/heads/work def",
+                 "refs/heads/work abc refs/heads/work def\n\n")
+        arguments = ("origin with space", "synthetic endpoint")
+        for updates in cases:
+            with self.subTest(updates=updates), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                previous = directory / "pre-push.media-vault-previous"
+                previous.write_text(
+                    '#!/bin/sh\nprintf "%s\\000" "$@" > "$(dirname "$0")/argv"\n'
+                    'cat > "$(dirname "$0")/seen"\nexit 23\n'
+                )
+                previous.chmod(0o755)
+                result = self.invoke(directory, updates, arguments)
+                self.assertEqual(result.returncode, 23)
+                self.assertEqual((directory / "seen").read_bytes(), updates.encode())
+                self.assertEqual((directory / "argv").read_bytes(),
+                                 b"origin with space\0synthetic endpoint\0")
+                self.assertEqual(list(directory.glob("dt-media-vault-pre-push.*")), [])
 
     def test_rejected_push_does_not_call_previous(self):
         with tempfile.TemporaryDirectory() as tmp:
