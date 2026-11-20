@@ -94,6 +94,7 @@ class HookControls(unittest.TestCase):
             capture = io.StringIO()
             with patch.object(TOOLS, "hook_location", return_value=Path(tmp) / "missing"), \
                     patch.object(TOOLS.shutil, "which", side_effect=lambda name: name), \
+                    patch.object(TOOLS.metadata, "version", return_value="999.0.0"), \
                     patch.object(TOOLS.subprocess, "run", side_effect=version), \
                     patch.dict(os.environ, {"SOURCE_VOLUME": "PRIVATE_VALUE_NOT_FOR_OUTPUT"}), \
                     patch.object(Path, "write_bytes") as write, \

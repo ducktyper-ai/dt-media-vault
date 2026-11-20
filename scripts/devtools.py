@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from importlib import metadata
+import re
 import os
 from pathlib import Path
 import shutil
@@ -104,6 +106,20 @@ def doctor() -> int:
         report(result.returncode == 0 and (expected is None or version == expected),
                name + " version " + version,
                "use the declared version; ruff is pinned by requirements-gate.lock")
+    # Metadata only: never import the application or execute a package to diagnose it.
+    for package, minimum in (("blake3", (0, 4, 1)), ("click", (8, 1, 7)),
+                             ("rich", (13, 7, 0)), ("mypy", (1, 8, 0))):
+        try:
+            installed_version = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            report(False, package + " runtime/development prerequisite",
+                   "use explicit setup on the authorized build host")
+            continue
+        stable = re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,2}", installed_version)
+        numeric = tuple(int(part) for part in installed_version.split(".")) if stable else ()
+        padded = numeric + (0,) * (3 - len(numeric))
+        report(bool(stable) and padded >= minimum, package + " metadata " + installed_version,
+               "select the declared minimum or reconcile a nonstable version explicitly")
     payload = (ROOT / "requirements-gate.lock").read_bytes()
     report(len(payload) == 912 and hashlib.sha256(payload).hexdigest() == LOCK_SHA256,
            "original gate lock identity", "restore the reviewed lock; never regenerate it implicitly")
