@@ -2,6 +2,30 @@
 
 sow: dt-media-vault-SOW-01
 
+
+Start with `make help` for the five-command first-time guide and `make help-all`
+for every target. `make doctor` reports prerequisites and the main-push hook
+without installing anything, printing environment values, or accessing media.
+Run `make hooks` to install lightweight protection against all pushes to `main`;
+an existing hook or saved prior hook causes refusal without changing or executing it.
+Custom hook locations require their owner's approved lightweight integration.
+Installation publishes exclusively and never overwrites a concurrently created hook.
+
+`make setup` uses an existing Python 3.12 on an authorized build host and installs
+only binary wheels matching `requirements-gate-universal.lock`, exported from
+`uv.lock` with the runtime and development extras. It downloads no interpreter
+and builds no source distributions. The original `requirements-gate.lock` stays
+unchanged as historical macOS-only evidence. Diagnostics install nothing. Native
+Linux installation and full-gate acceptance remain separate from lock generation.
+`make verify` remains the full offline gate, including syntax/whitespace, fatal
+lint, developer-tool typing, historical scope/privacy controls, and synthetic
+verifier/developer-command tests. It refuses to run on the Mac mini. `make lint`,
+`make format-check`, `make typecheck`, `make test`, and `make build` are documented
+build-host entry points. `make clean` removes only local tool caches, retaining
+analysis results. `make run` and every legacy storage target refuse; `make release`
+explains the reviewed merger path instead of publishing implicitly.
+
+
 Legacy storage Make targets are disabled unconditionally, including with explicit
 roots or approval flags, and with prerequisites marked old using `make -o`.
 Each storage recipe refuses on its first line. Storage-volume defaults have been

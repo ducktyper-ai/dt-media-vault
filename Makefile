@@ -1,94 +1,95 @@
-GREEN  := $(shell tput -Txterm setaf 2)
-YELLOW := $(shell tput -Txterm setaf 3)
-BLUE   := $(shell tput -Txterm setaf 4)
-RED    := $(shell tput -Txterm setaf 1)
-RESET  := $(shell tput -Txterm sgr0)
+GREEN :=
+YELLOW :=
+BLUE :=
+RED :=
+RESET :=
 
-PYTHON_VERSION := 3.13
+PYTHON_VERSION := 3.12
 VENV_NAME := .venv
 PYTHON := $(VENV_NAME)/bin/python
 
 # Legacy storage entry points stay disabled pending replacement tools and scope.
 .PHONY: nas-disabled
 check-volumes analyze-dry analyze migrate verify-migration index-catalog link-project: nas-disabled
-nas-disabled:
+nas-disabled: ## Refuse legacy NAS operations unconditionally
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 
-.PHONY: help
-help:
-	@echo ''
-	@echo '$(YELLOW)═══════════════════════════════════════════════════════════════════$(RESET)'
-	@echo '$(YELLOW)                  Media Archive Migration Toolkit$(RESET)'
-	@echo '$(YELLOW)═══════════════════════════════════════════════════════════════════$(RESET)'
-	@echo ''
-	@echo 'Legacy storage targets below are disabled; use make verify for offline checks.'
-	@echo '$(BLUE)PHASE 0: Initial Setup$(RESET)'
-	@echo '  $(GREEN)make setup$(RESET)              - Create Python environment and install dependencies'
-	@echo '  $(GREEN)make check-volumes$(RESET)      - Verify source/target volumes are accessible'
-	@echo ''
-	@echo '$(BLUE)PHASE 1: Analysis (Before NAS Arrives)$(RESET)'
-	@echo '  $(GREEN)make analyze-dry$(RESET)        - Quick scan without hash computation (20 min)'
-	@echo '  $(GREEN)make analyze$(RESET)            - Full analysis with duplicate detection (4-6 hours)'
-	@echo '                              Computes BLAKE3 hashes, detects duplicates'
-	@echo ''
-	@echo '$(BLUE)PHASE 2: Migration (When NAS Arrives)$(RESET)'
-	@echo '  $(GREEN)make migrate$(RESET)            - Copy files to NAS with verification (8-12 hours)'
-	@echo '                              Creates folder structure, copies files, verifies hashes'
-	@echo '  $(GREEN)make verify-migration$(RESET)   - NAS copy verification (approved access required)'
-	@echo ''
-	@echo '$(BLUE)PHASE 3: Ongoing Workflow$(RESET)'
-	@echo '  $(GREEN)make index-catalog$(RESET)      - Index YAML sidecars into searchable SQLite database'
-	@echo '  $(GREEN)make link-project$(RESET)       - Link footage into project structure'
-	@echo '                              Usage: make link-project PROJECT=ep-024 SHOOT=london DATE=2025-10-06 DEVICES="fx3 fx30"'
-	@echo ''
-	@echo '$(BLUE)Utilities$(RESET)'
-	@echo '  $(GREEN)make verify$(RESET)             - Offline source lint, tests and design checks; no NAS access'
-	@echo '  $(GREEN)make structure$(RESET)          - Show project file tree'
-	@echo '  $(GREEN)make clean$(RESET)              - Clean analysis results and Python cache'
-	@echo '  $(GREEN)make aggregate AGGREGATE_TARGET=<dir>$(RESET) - Aggregate source files'
-	@echo '  $(GREEN)make add-paths$(RESET)          - Add file paths as comments to Python files'
-	@echo ''
-	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
-	@echo '$(YELLOW)Typical Workflow:$(RESET)'
-	@echo '  1. make setup              → Install dependencies'
-	@echo '  2. make analyze-dry        → Preview what will be analyzed'
-	@echo '  3. make analyze            → Full analysis (run in tmux overnight)'
-	@echo '  4. Review analysis_results/ → Check duplicates_report.csv'
-	@echo '  5. [Wait for NAS to arrive]'
-	@echo '  6. make migrate            → Copy to NAS (run in tmux)'
-	@echo '  7. make verify-migration   → Check copied files in an approved NAS session'
-	@echo '  8. make index-catalog      → Build searchable database'
-	@echo '$(YELLOW)───────────────────────────────────────────────────────────────────$(RESET)'
-	@echo ''
+.PHONY: help help-all doctor hooks require-build-host lint format-check typecheck test build run release
+help: ## Start here: curated guide and five useful commands
+	@printf '%s\n' 'Media Vault — offline source and synthetic verifier toolkit' '' \
+	  'Start with these five commands:' \
+	  '  make help     — this guide; make help-all lists every target' \
+	  '  make doctor   — read-only prerequisites and hook diagnostics' \
+	  '  make hooks    — install lightweight main-push protection' \
+	  '  make setup    — install development tools on an authorized build host' \
+	  '  make verify   — full offline gate on an authorized build host' '' \
+	  'Use a short-lived branch, review, and the merger; never push main.' \
+	  'NAS workflows are disabled. No media root, volume, service, or network is needed by verify.' \
+	  'Build/test/gate jobs do not run on the Mac mini. Doctor and hooks run no gate.' \
+	  'Setup consumes the universal hash-checked lock with an existing Python 3.12; no interpreter download or source build.'
+
+help-all: ## List every target, including disabled legacy workflows
+	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / { name = $$1; sub(/^# /, "", name); printf "  %-24s %s\n", name, $$2 }' $(MAKEFILE_LIST)
+
+doctor: ## Diagnose tools, lock identity, environment names, and hooks without changes
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/devtools.py doctor
+
+hooks: ## Install a standalone main-push refusal; refuse existing hooks
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/devtools.py hooks
+
+require-build-host: ## Refuse build, setup, and checks on the Mac mini
+	@test "$$(uname -s)" != Darwin || { echo 'REFUSED: run this target on an authorized build host, not the Mac mini.' >&2; exit 1; }
+
+format-check: require-build-host ## Check changed-source whitespace without rewriting files
+	@git diff --check aeab77f8ca571ddf6a84557f1fa8decccdbe8d01 HEAD
+
+lint: require-build-host ## Run the same fatal Python lint selection as the offline gate
+	@ruff check --no-cache --select E9,F63,F7,F82 src tests scripts/devtools.py
+
+typecheck: require-build-host ## Type-check the new typed developer entry point with mypy
+	@mypy --follow-imports=skip scripts/devtools.py
+
+test: require-build-host ## Run synthetic verifier and developer-command tests; no media or NAS
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
+
+build: require-build-host ## Build the Python distribution with uv on an authorized host
+	@uv build
+
+run: ## Explain why real-media runtime commands are not currently admitted
+	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
+
+release: ## Explain the reviewed merger-only release path; never publish implicitly
+	$(error RELEASE_NOT_AUTOMATED: use the reviewed PR and authorized merger; no direct main push or package publication)
 
 .PHONY: setup
-setup:
+setup: require-build-host ## Create the existing development environment on an authorized build host
 	@echo "$(BLUE)Creating virtual environment...$(RESET)"
-	uv venv --python $(PYTHON_VERSION)
-	uv pip install -e ".[dev]" --python $(VENV_NAME)/bin/python
+	uv venv --no-python-downloads --python $(PYTHON_VERSION)
+	uv pip sync --require-hashes --only-binary=:all: --no-build --no-python-downloads \
+	  --python $(VENV_NAME)/bin/python requirements-gate-universal.lock
 	@echo "$(GREEN)Done! Run: source $(VENV_NAME)/bin/activate$(RESET)"
 
 .PHONY: check-volumes
-check-volumes:
+check-volumes: ## Disabled: real storage access needs replacement tools and separate scope
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(BLUE)Checking volumes...$(RESET)"
 	@test -d "$(SOURCE_VOLUME)" || (echo "$(RED)Source not found$(RESET)" && exit 1)
 	@echo "$(GREEN)Source OK: $(SOURCE_VOLUME)$(RESET)"
 
 .PHONY: analyze-dry
-analyze-dry: check-volumes
+analyze-dry: check-volumes ## Disabled: no archive scan is admitted
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results --dry-run
 
 .PHONY: analyze
-analyze: check-volumes
+analyze: check-volumes ## Disabled: no hashing or archive analysis is admitted
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 4-6 hours. Press Enter to continue...$(RESET)"
 	@read dummy
 	$(PYTHON) -m media_toolkit.analyzer --source $(SOURCE_VOLUME) --output ./analysis_results
 
 .PHONY: migrate
-migrate:
+migrate: ## Disabled: no real-media copy is admitted
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	@echo "$(YELLOW)This takes 8-12 hours. Press Enter to continue...$(RESET)"
 	@read dummy
@@ -96,20 +97,19 @@ migrate:
 
 .PHONY: verify verify-source verify-migration
 # The owning source gate is offline. Never depend on a NAS operation here.
-verify: verify-source
+verify: verify-source ## Run the complete offline source gate on an authorized build host
 
-verify-source:
+verify-source: ## Run source/history/privacy checks and synthetic safety controls
 	bash scripts/verify-source.sh
 
 # This legacy verifier is not an offline quality gate or permission to clean data.
-verify-migration:
+verify-migration: ## Disabled: never verify real NAS content through this target
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.verifier --manifest ./analysis_results/migration_manifest.json --target $(TARGET_VOLUME)
 
 .PHONY: clean
-clean:
-	rm -rf ./analysis_results .pytest_cache .mypy_cache .ruff_cache
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+clean: ## Remove only local tool caches; retain analysis results and media
+	rm -rf -- .pytest_cache .mypy_cache .ruff_cache
 
 .PHONY: structure
 structure: ## Show project structure
@@ -309,14 +309,14 @@ add-paths: ## Add file paths as first-line comments to all Python files
 # Unknown targets deliberately use make's failing default; no catch-all rule.
 
 .PHONY: index-catalog
-index-catalog:
+index-catalog: ## Disabled: no real-media catalog indexing is admitted
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.catalog index-sidecars \
 	  --catalog $(TARGET_VOLUME)/Catalog/catalog.sqlite \
 	  --root $(TARGET_VOLUME)
 
 .PHONY: link-project
-link-project:
+link-project: ## Disabled: no project/media links are admitted
 	$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)
 	$(PYTHON) -m media_toolkit.link_into_project \
 	  --root $(TARGET_VOLUME) \

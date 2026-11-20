@@ -2,6 +2,10 @@
 # sow: dt-media-vault-SOW-01
 # Offline owning gate: source controls plus synthetic local verifier safety tests.
 set -euo pipefail
+if [ "$(uname -s)" = Darwin ]; then
+    echo "REFUSED: run make verify on an authorized build host, not the Mac mini." >&2
+    exit 1
+fi
 cd -- "$(dirname -- "$0")/.."
 
 export PYTHONDONTWRITEBYTECODE=1
@@ -20,6 +24,7 @@ import sys
 import tabnanny
 import tempfile
 import tokenize
+import tomllib
 import unittest
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
@@ -37,6 +42,7 @@ LOCK_SHA256 = "321934de86581ce858defa66c9fa9af70ba48a23eb687bf3524b006a5366da4e"
 LOCK_PRIMARY_COMMIT = "73fd96105173fa2b90c626127a0c1ebd84687909"
 # Bind only after actual reviewed PR4 merge and immutable source readback.
 LOCK_PHASE_BASELINE = "9093d47ae0e07f628385dc1ebf3e696b922f6204"
+MAKEFILE_BASELINE = "aeab77f8ca571ddf6a84557f1fa8decccdbe8d01"
 MEMO = "docs/design/sow-01-media-vault-design.md"
 INDEX = "docs/evidence/INDEX.json"
 ARCHIVE_BYTES = 30132
@@ -130,12 +136,69 @@ def check_cleanup_scope(names):
     require(set(names) == allowed, "cleanup must include the complete approved path set")
 
 
+def check_makefile_scope(names):
+    # November20 operator directive: developer entry points only, no storage product changes.
+    allowed = {"Makefile", "README.md", "README_GETTING_STARTED.md",
+               "scripts/verify-source.sh", "scripts/devtools.py", "scripts/pre-push.sh",
+               "tests/test_devtools.py", "pyproject.toml", "uv.lock",
+               "requirements-gate-universal.lock"}
+    require(set(names) <= allowed, "change outside Makefile compliance phase")
+    require({"Makefile", "scripts/devtools.py", "scripts/pre-push.sh",
+             "pyproject.toml", "uv.lock", "requirements-gate-universal.lock"} <= set(names),
+            "incomplete Makefile compliance phase")
+
+
 def check_lock_phase(names, payload):
     # One exact dependency-lock phase only.
     require(set(names) == {LOCK}, "lock phase paths differ from exact allocation")
     require(len(payload) == LOCK_BYTES, "lock phase byte count mismatch")
     require(hashlib.sha256(payload).hexdigest() == LOCK_SHA256,
             "lock phase SHA256 mismatch")
+
+
+def check_dependency_amendment(before, after):
+    require(before.count('"ruff>=0.2.0"') == 1, "dependency baseline pin missing")
+    require(after == before.replace('"ruff>=0.2.0"', '"ruff==0.17.4"'),
+            "dependency change outside exact Ruff pin")
+
+
+def check_universal_document(value):
+    packages = value.get("package", [])
+    require(bool(packages), "universal lock packages missing")
+    selected = {}
+    for package in packages:
+        name = package.get("name")
+        selected[name] = package
+        if name == "media-archive-toolkit":
+            require(package.get("source") == {"editable": "."}, "unexpected project lock source")
+            continue
+        require(package.get("source") == {"registry": "https://pypi.org/simple"},
+                "universal registry boundary")
+        artifacts = list(package.get("wheels", []))
+        if package.get("sdist"):
+            artifacts.append(package["sdist"])
+        require(bool(artifacts), "universal package artifacts missing")
+        for artifact in artifacts:
+            url = urlsplit(artifact.get("url", ""))
+            require(url.scheme == "https" and url.hostname == "files.pythonhosted.org"
+                    and not url.username and not url.password, "universal artifact URL boundary")
+            require(bool(re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("hash", ""))),
+                    "universal artifact hash missing")
+    for name, version in (("ruff", "0.17.4"), ("mypy", "2.4.1")):
+        package = selected.get(name, {})
+        require(package.get("version") == version, "universal tool version mismatch")
+        require(any("manylinux" in wheel["url"] and "x86_64" in wheel["url"]
+                    for wheel in package.get("wheels", [])), "Linux x86_64 tool wheel missing")
+
+
+def check_universal_payloads(lock_payload, export_payload):
+    require(len(lock_payload) == 340177 and hashlib.sha256(lock_payload).hexdigest()
+            == "807f45132f15b0e77ba76ca4f9b8eba6f7e9c1d41e8051950428d2de64ff2adf",
+            "universal lock identity mismatch")
+    require(len(export_payload) == 88357 and hashlib.sha256(export_payload).hexdigest()
+            == "d1dc474392912a9b6c5761195a1f71943198f2801892a418c81b6e249781734d",
+            "universal export identity mismatch")
+    check_universal_document(tomllib.loads(lock_payload.decode("utf-8")))
 
 
 def check_lock_commit_record(commit, message):
@@ -369,8 +432,8 @@ class GateControls(unittest.TestCase):
         guard = "\t$(error NAS_WORKFLOW_DISABLED: replacement tools and separately approved storage scope required)\n"
         for target in NAS_TARGETS:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
-                header = target + (": check-volumes\n" if target in {"analyze", "analyze-dry"}
-                                   else ":\n")
+                header = next(line + "\n" for line in original.splitlines()
+                              if line.startswith(target + ":"))
                 self.assertEqual(original.count(header + guard), 1)
                 mutant = original.replace(header + guard, header, 1)
                 directory = Path(temporary)
@@ -460,6 +523,48 @@ class LockPhaseControls(unittest.TestCase):
             merged = commit("integration", covered, uncovered)
             with self.assertRaisesRegex(ValueError, "lock commit missing standalone SOW"):
                 check_lock_commit_messages(accepted, merged, directory)
+
+
+class UniversalLockControls(unittest.TestCase):
+    def document(self):
+        return tomllib.loads((ROOT / "uv.lock").read_text())
+
+    def test_dependency_amendment_is_exact_ruff_pin_only(self):
+        before = 'dev = ["ruff>=0.2.0"]\n'
+        accepted = 'dev = ["ruff==0.17.4"]\n'
+        check_dependency_amendment(before, accepted)
+        for other in (before, accepted + 'runtime = ["unapproved"]\n'):
+            with self.subTest(other=other), self.assertRaisesRegex(ValueError,
+                                                               "dependency change"):
+                check_dependency_amendment(before, other)
+
+    def test_universal_lock_and_export_exact_identity(self):
+        check_universal_payloads((ROOT / "uv.lock").read_bytes(),
+                                 (ROOT / "requirements-gate-universal.lock").read_bytes())
+
+    def test_universal_lock_rejects_wrong_hash(self):
+        payload = (ROOT / "uv.lock").read_bytes()
+        with self.assertRaisesRegex(ValueError, "universal lock identity"):
+            check_universal_payloads(bytes([payload[0] ^ 1]) + payload[1:],
+                                     (ROOT / "requirements-gate-universal.lock").read_bytes())
+
+    def test_universal_export_rejects_wrong_hash(self):
+        payload = (ROOT / "requirements-gate-universal.lock").read_bytes()
+        with self.assertRaisesRegex(ValueError, "universal export identity"):
+            check_universal_payloads((ROOT / "uv.lock").read_bytes(), payload + b" ")
+
+    def test_universal_document_rejects_untrusted_registry(self):
+        data = self.document()
+        next(p for p in data["package"] if p["name"] == "ruff")["source"] = {"registry": "http://invalid.example"}
+        with self.assertRaisesRegex(ValueError, "universal registry boundary"):
+            check_universal_document(data)
+
+    def test_universal_document_requires_linux_tool_wheels(self):
+        data = self.document()
+        tool = next(p for p in data["package"] if p["name"] == "mypy")
+        tool["wheels"] = [w for w in tool["wheels"] if "manylinux" not in w["url"]]
+        with self.assertRaisesRegex(ValueError, "Linux x86_64 tool wheel missing"):
+            check_universal_document(data)
 
 
 class PublicSowControls(unittest.TestCase):
@@ -555,9 +660,14 @@ def main():
     require(lock_blob.returncode == 0, "cannot read merged lock blob")
     check_lock_phase(set(filter(None, lock_paths.stdout.split("\0"))), lock_blob.stdout)
     check_lock_commit_messages(CLEANUP_BASELINE, LOCK_PHASE_BASELINE)
-    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, "HEAD"])
+    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, MAKEFILE_BASELINE])
     require(cleanup.returncode == 0, "cannot compare cleanup phase baseline")
     check_cleanup_scope(set(filter(None, cleanup.stdout.split("\0"))))
+    require(run(["git", "merge-base", "--is-ancestor", MAKEFILE_BASELINE,
+                 "HEAD"]).returncode == 0, "Makefile phase ancestry mismatch")
+    current = run(["git", "diff", "--name-only", "-z", MAKEFILE_BASELINE, "HEAD"])
+    require(current.returncode == 0, "cannot compare Makefile phase")
+    check_makefile_scope(set(filter(None, current.stdout.split("\0"))))
     require(MEMO not in tracked, "archived memo still tracked")
     require(INDEX in tracked, "archive index is not tracked")
     require(changed <= tracked | {MEMO}, "deleted source outside archived memo")
@@ -579,6 +689,12 @@ def main():
             sources[name] = current.read_text(encoding="utf-8")
 
     check_memo_index((ROOT / INDEX).read_text(encoding="utf-8"))
+    dependency_baseline = run(["git", "show", MAKEFILE_BASELINE + ":pyproject.toml"])
+    require(dependency_baseline.returncode == 0, "cannot read dependency baseline")
+    check_dependency_amendment(dependency_baseline.stdout,
+                               (ROOT / "pyproject.toml").read_text())
+    check_universal_payloads((ROOT / "uv.lock").read_bytes(),
+                             (ROOT / "requirements-gate-universal.lock").read_bytes())
 
     for name, text in sources.items():
         if name.endswith(".py"):
@@ -603,6 +719,7 @@ def main():
           flush=True)
     ruff_version = run(["ruff", "--version"])
     require(ruff_version.returncode == 0, "existing dev tool ruff unavailable; do not install implicitly")
+    require(ruff_version.stdout.strip() == "ruff 0.17.4", "ruff differs from gate lock pin")
     print(ruff_version.stdout.strip(), flush=True)
     python_sources = sorted(name for name in tracked if name.endswith(".py"))
     fatal_lint = run(["ruff", "check", "--no-cache", "--select", "E9,F63,F7,F82",
@@ -610,18 +727,26 @@ def main():
     print(fatal_lint.stdout, end="", flush=True)
     require(fatal_lint.returncode == 0, "fatal Python lint failed: " + fatal_lint.stderr)
 
+    mypy_version = run(["mypy", "--version"])
+    require(mypy_version.returncode == 0 and mypy_version.stdout.split()[:2]
+            == ["mypy", "2.4.1"], "mypy differs from universal lock pin")
+    typed = run(["mypy", "--follow-imports=skip", "scripts/devtools.py"])
+    print(typed.stdout, end="", flush=True)
+    require(typed.returncode == 0, "developer entry point type check failed: " + typed.stderr)
+
     suite = unittest.TestSuite([
         unittest.defaultTestLoader.loadTestsFromTestCase(GateControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(CleanupControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(LockPhaseControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(PublicSowControls),
+        unittest.defaultTestLoader.loadTestsFromTestCase(UniversalLockControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(ArchiveIndexControls),
     ])
     require(unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful(),
             "positive/reject controls failed")
     verifier_tests = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests",
-         "-p", "test_verifier_safety.py", "-v"],
+         "-p", "test_*.py", "-v"],
         env=dict(ENV, PYTHONPATH=str(ROOT / "src")),
         capture_output=True, text=True, timeout=120,
     )
