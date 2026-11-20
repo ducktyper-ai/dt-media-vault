@@ -14,6 +14,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK_SHA256 = "321934de86581ce858defa66c9fa9af70ba48a23eb687bf3524b006a5366da4e"
+UNIVERSAL_SHA256 = "807f45132f15b0e77ba76ca4f9b8eba6f7e9c1d41e8051950428d2de64ff2adf"
+EXPORT_SHA256 = "d1dc474392912a9b6c5761195a1f71943198f2801892a418c81b6e249781734d"
 
 
 def git(*arguments: str) -> str:
@@ -94,7 +96,7 @@ def doctor() -> int:
         ("git", ["--version"], None), ("make", ["--version"], None),
         ("bash", ["--version"], None), ("uv", ["--version"], None),
         ("ruff", ["--version"], "ruff 0.17.4"),
-        ("mypy", ["--version"], None),
+        ("mypy", ["--version"], "mypy 2.4.1"),
     ):
         executable = shutil.which(name)
         if not executable:
@@ -103,9 +105,9 @@ def doctor() -> int:
         result = subprocess.run([executable, *arguments], capture_output=True,
                                 text=True, check=False, timeout=10)
         version = result.stdout.splitlines()[0] if result.stdout else "unknown version"
-        report(result.returncode == 0 and (expected is None or version == expected),
+        report(result.returncode == 0 and (expected is None or version.split()[:2] == expected.split()),
                name + " version " + version,
-               "use the declared version; ruff is pinned by requirements-gate.lock")
+               "use the frozen universal toolchain; Ruff 0.17.4 and mypy 2.4.1")
     # Metadata only: never import the application or execute a package to diagnose it.
     for package, minimum in (("blake3", (0, 4, 1)), ("click", (8, 1, 7)),
                              ("rich", (13, 7, 0)), ("mypy", (1, 8, 0))):
@@ -123,8 +125,15 @@ def doctor() -> int:
     payload = (ROOT / "requirements-gate.lock").read_bytes()
     report(len(payload) == 912 and hashlib.sha256(payload).hexdigest() == LOCK_SHA256,
            "original gate lock identity", "restore the reviewed lock; never regenerate it implicitly")
-    print("INFO lock target: CPython 3.14 macOS arm64, gate-only; no Linux or dev closure claimed")
-    print("INFO Python setup minor: 3.13; other tool exact pins are not declared by this repo")
+    for name, size, expected_hash in (
+        ("uv.lock", 340177, UNIVERSAL_SHA256),
+        ("requirements-gate-universal.lock", 88357, EXPORT_SHA256),
+    ):
+        locked = (ROOT / name).read_bytes()
+        report(len(locked) == size and hashlib.sha256(locked).hexdigest() == expected_hash,
+               name + " identity", "restore the reviewed universal lock and matching export")
+    print("INFO historical lock retained; universal lock/export includes runtime and dev closure")
+    print("INFO setup selects existing Python 3.12; no interpreter download or source build")
     print("INFO environment names: PATH selects tools; SOURCE_VOLUME and TARGET_VOLUME are not needed")
     print("INFO offline gate needs no media root, mounted volume, service, or network")
     print("INFO dependency acquisition needs package-index access only during explicit setup")

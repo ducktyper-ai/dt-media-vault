@@ -87,7 +87,7 @@ class HookControls(unittest.TestCase):
 
     def test_doctor_does_not_mutate_or_print_environment_values(self):
         def version(command, **kwargs):
-            output = "ruff 0.17.4\n" if command[0] == "ruff" else "version fixture\n"
+            output = {"ruff": "ruff 0.17.4\n", "mypy": "mypy 2.4.1 (compiled: yes)\n"}.get(command[0], "version fixture\n")
             return SimpleNamespace(returncode=0, stdout=output)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,9 +125,10 @@ class HookControls(unittest.TestCase):
         section = text.split("def check_makefile_scope(names):", 1)[1].split("def check_lock_phase", 1)[0]
         namespace = {"require": lambda ok, reason: None if ok else (_ for _ in ()).throw(ValueError(reason))}
         exec("def check_makefile_scope(names):" + section, namespace)
-        required = {"Makefile", "scripts/devtools.py", "scripts/pre-push.sh"}
+        required = {"Makefile", "scripts/devtools.py", "scripts/pre-push.sh",
+                    "uv.lock", "requirements-gate-universal.lock", "pyproject.toml"}
         namespace["check_makefile_scope"](required)
-        for extra in ("src/media_toolkit/migrator.py", "requirements-gate.lock", "pyproject.toml"):
+        for extra in ("src/media_toolkit/migrator.py", "requirements-gate.lock", "src/media_toolkit/analyzer.py"):
             with self.subTest(extra=extra), self.assertRaises(ValueError):
                 namespace["check_makefile_scope"](required | {extra})
 

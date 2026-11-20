@@ -10,10 +10,12 @@ Run `make hooks` to install lightweight protection against all pushes to `main`;
 an existing executable standard pre-push hook is preserved and chained. Custom
 hook locations require their owner's integration; they are never overwritten.
 
-`make setup` explicitly installs the existing development extras on an authorized
-build host. It is not a reproducible Linux gate-environment installation: the
-retained hash lock covers only the historical CPython 3.14 macOS arm64 gate-only
-closure. No new platform or package acquisition is approved by diagnostics.
+`make setup` uses an existing Python 3.12 on an authorized build host and installs
+only binary wheels matching `requirements-gate-universal.lock`, exported from
+`uv.lock` with the runtime and development extras. It downloads no interpreter
+and builds no source distributions. The original `requirements-gate.lock` stays
+unchanged as historical macOS-only evidence. Diagnostics install nothing. Native
+Linux installation and full-gate acceptance remain separate from lock generation.
 `make verify` remains the full offline gate, including syntax/whitespace, fatal
 lint, developer-tool typing, historical scope/privacy controls, and synthetic
 verifier/developer-command tests. It refuses to run on the Mac mini. `make lint`,

@@ -24,6 +24,7 @@ import sys
 import tabnanny
 import tempfile
 import tokenize
+import tomllib
 import unittest
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
@@ -139,9 +140,11 @@ def check_makefile_scope(names):
     # November20 operator directive: developer entry points only, no storage product changes.
     allowed = {"Makefile", "README.md", "README_GETTING_STARTED.md",
                "scripts/verify-source.sh", "scripts/devtools.py", "scripts/pre-push.sh",
-               "tests/test_devtools.py"}
+               "tests/test_devtools.py", "pyproject.toml", "uv.lock",
+               "requirements-gate-universal.lock"}
     require(set(names) <= allowed, "change outside Makefile compliance phase")
-    require({"Makefile", "scripts/devtools.py", "scripts/pre-push.sh"} <= set(names),
+    require({"Makefile", "scripts/devtools.py", "scripts/pre-push.sh",
+             "pyproject.toml", "uv.lock", "requirements-gate-universal.lock"} <= set(names),
             "incomplete Makefile compliance phase")
 
 
@@ -151,6 +154,45 @@ def check_lock_phase(names, payload):
     require(len(payload) == LOCK_BYTES, "lock phase byte count mismatch")
     require(hashlib.sha256(payload).hexdigest() == LOCK_SHA256,
             "lock phase SHA256 mismatch")
+
+
+def check_universal_document(value):
+    packages = value.get("package", [])
+    require(bool(packages), "universal lock packages missing")
+    selected = {}
+    for package in packages:
+        name = package.get("name")
+        selected[name] = package
+        if name == "media-archive-toolkit":
+            require(package.get("source") == {"editable": "."}, "unexpected project lock source")
+            continue
+        require(package.get("source") == {"registry": "https://pypi.org/simple"},
+                "universal registry boundary")
+        artifacts = list(package.get("wheels", []))
+        if package.get("sdist"):
+            artifacts.append(package["sdist"])
+        require(bool(artifacts), "universal package artifacts missing")
+        for artifact in artifacts:
+            url = urlsplit(artifact.get("url", ""))
+            require(url.scheme == "https" and url.hostname == "files.pythonhosted.org"
+                    and not url.username and not url.password, "universal artifact URL boundary")
+            require(bool(re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("hash", ""))),
+                    "universal artifact hash missing")
+    for name, version in (("ruff", "0.17.4"), ("mypy", "2.4.1")):
+        package = selected.get(name, {})
+        require(package.get("version") == version, "universal tool version mismatch")
+        require(any("manylinux" in wheel["url"] and "x86_64" in wheel["url"]
+                    for wheel in package.get("wheels", [])), "Linux x86_64 tool wheel missing")
+
+
+def check_universal_payloads(lock_payload, export_payload):
+    require(len(lock_payload) == 340177 and hashlib.sha256(lock_payload).hexdigest()
+            == "807f45132f15b0e77ba76ca4f9b8eba6f7e9c1d41e8051950428d2de64ff2adf",
+            "universal lock identity mismatch")
+    require(len(export_payload) == 88357 and hashlib.sha256(export_payload).hexdigest()
+            == "d1dc474392912a9b6c5761195a1f71943198f2801892a418c81b6e249781734d",
+            "universal export identity mismatch")
+    check_universal_document(tomllib.loads(lock_payload.decode("utf-8")))
 
 
 def check_lock_commit_record(commit, message):
@@ -477,6 +519,39 @@ class LockPhaseControls(unittest.TestCase):
                 check_lock_commit_messages(accepted, merged, directory)
 
 
+class UniversalLockControls(unittest.TestCase):
+    def document(self):
+        return tomllib.loads((ROOT / "uv.lock").read_text())
+
+    def test_universal_lock_and_export_exact_identity(self):
+        check_universal_payloads((ROOT / "uv.lock").read_bytes(),
+                                 (ROOT / "requirements-gate-universal.lock").read_bytes())
+
+    def test_universal_lock_rejects_wrong_hash(self):
+        payload = (ROOT / "uv.lock").read_bytes()
+        with self.assertRaisesRegex(ValueError, "universal lock identity"):
+            check_universal_payloads(bytes([payload[0] ^ 1]) + payload[1:],
+                                     (ROOT / "requirements-gate-universal.lock").read_bytes())
+
+    def test_universal_export_rejects_wrong_hash(self):
+        payload = (ROOT / "requirements-gate-universal.lock").read_bytes()
+        with self.assertRaisesRegex(ValueError, "universal export identity"):
+            check_universal_payloads((ROOT / "uv.lock").read_bytes(), payload + b" ")
+
+    def test_universal_document_rejects_untrusted_registry(self):
+        data = self.document()
+        next(p for p in data["package"] if p["name"] == "ruff")["source"] = {"registry": "http://invalid.example"}
+        with self.assertRaisesRegex(ValueError, "universal registry boundary"):
+            check_universal_document(data)
+
+    def test_universal_document_requires_linux_tool_wheels(self):
+        data = self.document()
+        tool = next(p for p in data["package"] if p["name"] == "mypy")
+        tool["wheels"] = [w for w in tool["wheels"] if "manylinux" not in w["url"]]
+        with self.assertRaisesRegex(ValueError, "Linux x86_64 tool wheel missing"):
+            check_universal_document(data)
+
+
 class PublicSowControls(unittest.TestCase):
     def test_historical_audit_keeps_public_marker_disabled(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -599,6 +674,8 @@ def main():
             sources[name] = current.read_text(encoding="utf-8")
 
     check_memo_index((ROOT / INDEX).read_text(encoding="utf-8"))
+    check_universal_payloads((ROOT / "uv.lock").read_bytes(),
+                             (ROOT / "requirements-gate-universal.lock").read_bytes())
 
     for name, text in sources.items():
         if name.endswith(".py"):
@@ -640,6 +717,7 @@ def main():
         unittest.defaultTestLoader.loadTestsFromTestCase(CleanupControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(LockPhaseControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(PublicSowControls),
+        unittest.defaultTestLoader.loadTestsFromTestCase(UniversalLockControls),
         unittest.defaultTestLoader.loadTestsFromTestCase(ArchiveIndexControls),
     ])
     require(unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful(),

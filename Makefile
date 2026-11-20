@@ -4,7 +4,7 @@ BLUE :=
 RED :=
 RESET :=
 
-PYTHON_VERSION := 3.13
+PYTHON_VERSION := 3.12
 VENV_NAME := .venv
 PYTHON := $(VENV_NAME)/bin/python
 
@@ -26,7 +26,7 @@ help: ## Start here: curated guide and five useful commands
 	  'Use a short-lived branch, review, and the merger; never push main.' \
 	  'NAS workflows are disabled. No media root, volume, service, or network is needed by verify.' \
 	  'Build/test/gate jobs do not run on the Mac mini. Doctor and hooks run no gate.' \
-	  'Setup uses the existing development ranges; requirements-gate.lock is the historical CPython 3.14 macOS arm64 gate-only lock, not a Linux install plan.'
+	  'Setup consumes the universal hash-checked lock with an existing Python 3.12; no interpreter download or source build.'
 
 help-all: ## List every target, including disabled legacy workflows
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / { name = $$1; sub(/^# /, "", name); printf "  %-24s %s\n", name, $$2 }' $(MAKEFILE_LIST)
@@ -64,8 +64,9 @@ release: ## Explain the reviewed merger-only release path; never publish implici
 .PHONY: setup
 setup: require-build-host ## Create the existing development environment on an authorized build host
 	@echo "$(BLUE)Creating virtual environment...$(RESET)"
-	uv venv --python $(PYTHON_VERSION)
-	uv pip install -e ".[dev]" ruff==0.17.4 --python $(VENV_NAME)/bin/python
+	uv venv --no-python-downloads --python $(PYTHON_VERSION)
+	uv pip sync --require-hashes --only-binary=:all: --no-build --no-python-downloads \
+	  --python $(VENV_NAME)/bin/python requirements-gate-universal.lock
 	@echo "$(GREEN)Done! Run: source $(VENV_NAME)/bin/activate$(RESET)"
 
 .PHONY: check-volumes
