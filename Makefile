@@ -65,7 +65,7 @@ release: ## Explain the reviewed merger-only release path; never publish implici
 setup: require-build-host ## Create the existing development environment on an authorized build host
 	@echo "$(BLUE)Creating virtual environment...$(RESET)"
 	uv venv --python $(PYTHON_VERSION)
-	uv pip install -e ".[dev]" --python $(VENV_NAME)/bin/python
+	uv pip install -e ".[dev]" ruff==0.17.4 --python $(VENV_NAME)/bin/python
 	@echo "$(GREEN)Done! Run: source $(VENV_NAME)/bin/activate$(RESET)"
 
 .PHONY: check-volumes
