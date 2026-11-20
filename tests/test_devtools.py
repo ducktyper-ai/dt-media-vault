@@ -1,6 +1,10 @@
 """Synthetic hook and diagnostics checks; no push, media, or network."""
 # sow: public
 import importlib.util
+import contextlib
+import io
+import os
+from types import SimpleNamespace
 from pathlib import Path
 import subprocess
 import tempfile
@@ -80,6 +84,39 @@ class HookControls(unittest.TestCase):
             with patch.object(TOOLS, "git", side_effect=[str(common), str(custom)]):
                 with self.assertRaisesRegex(RuntimeError, "custom core.hooksPath"):
                     TOOLS.hook_location()
+
+    def test_doctor_does_not_mutate_or_print_environment_values(self):
+        def version(command, **kwargs):
+            output = "ruff 0.17.4\n" if command[0] == "ruff" else "version fixture\n"
+            return SimpleNamespace(returncode=0, stdout=output)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            capture = io.StringIO()
+            with patch.object(TOOLS, "hook_location", return_value=Path(tmp) / "missing"), \
+                    patch.object(TOOLS.shutil, "which", side_effect=lambda name: name), \
+                    patch.object(TOOLS.subprocess, "run", side_effect=version), \
+                    patch.dict(os.environ, {"SOURCE_VOLUME": "PRIVATE_VALUE_NOT_FOR_OUTPUT"}), \
+                    patch.object(Path, "write_bytes") as write, \
+                    patch.object(Path, "mkdir") as mkdir, \
+                    contextlib.redirect_stdout(capture):
+                self.assertEqual(TOOLS.doctor(), 1)  # Missing hook is actionable, not a pass.
+                write.assert_not_called()
+                mkdir.assert_not_called()
+            self.assertNotIn("PRIVATE_VALUE_NOT_FOR_OUTPUT", capture.getvalue())
+            self.assertIn("FIX main-push guard", capture.getvalue())
+
+    def test_symlink_hook_refused_without_modification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            common = Path(tmp)
+            (common / "hooks").mkdir()
+            target = common / "original"
+            target.write_text("held")
+            hook = common / "hooks/pre-push"
+            hook.symlink_to(target)
+            with patch.object(TOOLS, "git", side_effect=[str(common), str(hook)]):
+                with self.assertRaisesRegex(RuntimeError, "symlink"):
+                    TOOLS.hook_location()
+            self.assertEqual(target.read_text(), "held")
 
     def test_scope_rejects_product_or_lock_changes(self):
         # The full gate itself exercises phase checks; these inputs must remain out of scope.

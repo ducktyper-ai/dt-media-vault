@@ -623,6 +623,7 @@ def main():
           flush=True)
     ruff_version = run(["ruff", "--version"])
     require(ruff_version.returncode == 0, "existing dev tool ruff unavailable; do not install implicitly")
+    require(ruff_version.stdout.strip() == "ruff 0.17.4", "ruff differs from gate lock pin")
     print(ruff_version.stdout.strip(), flush=True)
     python_sources = sorted(name for name in tracked if name.endswith(".py"))
     fatal_lint = run(["ruff", "check", "--no-cache", "--select", "E9,F63,F7,F82",
