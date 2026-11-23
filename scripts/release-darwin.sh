@@ -34,13 +34,13 @@ fi
 out=${RELEASE_DIR:-dist}
 mkdir -p -- "$out"
 out=$(cd -- "$out" && pwd -P)
-archive="$out/$name.tar.gz"
-[[ ! -e "$archive" && ! -L "$archive" && ! -e "$archive.sha256" && ! -L "$archive.sha256" ]] ||
-    fail 'Release output already exists.'
+destination="$out/$name"
+[[ ! -e "$destination" && ! -L "$destination" ]] || fail 'Release output already exists.'
+archive="$destination/$name.tar.gz"
 scratch=$(mktemp -d "$out/.media-vault-release.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 stage="$scratch/stage"
-mkdir -p "$stage/bin" "$stage/docs" "$scratch/wheel"
+mkdir -p "$stage/bin" "$stage/docs" "$scratch/wheel" "$scratch/publish"
 
 "$python" -I -m venv "$scratch/build"
 build_python="$scratch/build/bin/python"
@@ -82,22 +82,24 @@ MEDIA_VAULT_PYTHON="$python" "$stage/bin/media-catalog" --help
 [[ "$(git rev-parse HEAD)" == "$head" && -z "$(git status --porcelain)" ]] ||
     fail 'The source checkout changed during the build.'
 (
-    cd "$scratch"
-    COPYFILE_DISABLE=1 tar -C stage -czf "$name.tar.gz" bin lib docs LICENSE CHANGELOG.md RELEASE.json
+    cd "$scratch/publish"
+    COPYFILE_DISABLE=1 tar -C "$stage" -czf "$name.tar.gz" bin lib docs LICENSE CHANGELOG.md RELEASE.json
     shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
 )
-"$python" -I - "$scratch/$name.tar.gz" "$archive" <<'PYTHONSCRIPT'
+# Publish both files in one rename, without replacing even an empty destination.
+"$python" -I - "$scratch/publish" "$destination" <<'PYTHONSCRIPT'
+import ctypes
 import os
 import sys
 
-source, output = sys.argv[1:]
-os.link(source, output)
-try:
-    os.link(source + ".sha256", output + ".sha256")
-except OSError:
-    if os.path.samefile(source, output):
-        os.unlink(output)
-    raise
+source, destination = map(os.fsencode, sys.argv[1:])
+rename_exclusive = 0x00000004  # Darwin RENAME_EXCL in sys/stdio.h
+rename = ctypes.CDLL(None, use_errno=True).renamex_np
+rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+rename.restype = ctypes.c_int
+if rename(source, destination, rename_exclusive) != 0:
+    error = ctypes.get_errno()
+    raise SystemExit(f"Could not publish release directory: {os.strerror(error)}")
 PYTHONSCRIPT
 printf '%s\n' "$archive"
 cat "$archive.sha256"

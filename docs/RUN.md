@@ -48,7 +48,10 @@ needs Git, native CPython 3.12 with venv and pip, and access to the hash-pinned
 wheel index. It exercises CLI startup from the packaged files.
 
 From the clean upstream main commit approved for release, run `make release`.
-It writes the archive and its checksum under `dist/`, or the specified
-`RELEASE_DIR`. The archive records the exact source commit and expected tag
+It publishes the archive and its checksum together in
+`dist/dt-media-vault-0.1.0-darwin-arm64/`, or under the specified
+`RELEASE_DIR`. A candidate uses a directory with its commit suffix. Existing
+release directories are preserved. The archive records the exact source
+commit and expected tag
 `v0.1.0` in `RELEASE.json`. Publish only when that tag resolves to the archived
 commit.
