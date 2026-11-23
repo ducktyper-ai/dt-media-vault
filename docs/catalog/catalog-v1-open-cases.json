@@ -1,0 +1,74 @@
+{
+  "description": "Contract fixture inputs. Payload text is synthetic UTF-8 bytes.",
+  "asset_id": "blake3:1e2724dde393dfb6e7df1cc863428f321f534a81482b0d45f7df8b1b6e69ba8c",
+  "selected_root_id": "primary-nas",
+  "selected_relative_path": "Originals/undated/clip.mov",
+  "cases": [
+    {
+      "name": "intact_snapshot_location",
+      "root_mounted": true,
+      "volume_matches": true,
+      "opened_utf8": "fixture-old",
+      "expected_editable": true
+    },
+    {
+      "name": "disconnect_after_snapshot",
+      "root_mounted": false,
+      "volume_matches": false,
+      "expected_editable": false
+    },
+    {
+      "name": "wrong_volume_same_mount_path",
+      "root_mounted": true,
+      "volume_matches": false,
+      "opened_utf8": "fixture-old",
+      "expected_editable": false
+    },
+    {
+      "name": "same_size_replacement_after_snapshot",
+      "root_mounted": true,
+      "volume_matches": true,
+      "opened_utf8": "fixture-new",
+      "opened_asset_id": "blake3:80f47508556959a164c8023ffd428ef837f66bdf8136225935766ae3a837687a",
+      "expected_editable": false
+    },
+    {
+      "name": "path_escape",
+      "file": "catalog-v1-escape.json",
+      "expected_schema_valid": false
+    },
+    {
+      "name": "non_nfc_path",
+      "relative_path": "Originals/Café.mov",
+      "expected_semantic_valid": false
+    },
+    {
+      "name": "unverified_location",
+      "verification": "unverified",
+      "availability": "available",
+      "root_mounted": true,
+      "volume_matches": true,
+      "opened_utf8": "fixture-old",
+      "expected_editable": false
+    },
+    {
+      "name": "unknown_availability_during_recovery",
+      "verification": "verified",
+      "availability": "unknown",
+      "recovery_pending": true,
+      "root_mounted": true,
+      "volume_matches": true,
+      "opened_utf8": "fixture-old",
+      "expected_editable": false
+    },
+    {
+      "name": "saved_offline_row_needs_fresh_query",
+      "verification": "verified",
+      "availability": "offline",
+      "root_mounted": true,
+      "volume_matches": true,
+      "opened_utf8": "fixture-old",
+      "expected_editable": false
+    }
+  ]
+}

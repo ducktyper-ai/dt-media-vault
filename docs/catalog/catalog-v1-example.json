@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "catalog_id": "synthetic-vault",
+  "catalog_revision": 7,
+  "generated_at": "2026-11-23T21:46:00Z",
+  "next_after": null,
+  "items": [
+    {
+      "asset_id": "blake3:1e2724dde393dfb6e7df1cc863428f321f534a81482b0d45f7df8b1b6e69ba8c",
+      "size_bytes": 11,
+      "media_type": "video",
+      "recorded_at": null,
+      "duration_ms": null,
+      "device_id": null,
+      "project_id": "demo",
+      "shoot_id": null,
+      "speaker_ids": [],
+      "locations": [
+        {
+          "root_id": "backup-nas",
+          "relative_path": "Originals/undated/clip.mov",
+          "verification": "verified",
+          "availability": "offline",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        },
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Originals/undated/clip.mov",
+          "verification": "verified",
+          "availability": "available",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        },
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Staging/clip.mov",
+          "verification": "unverified",
+          "availability": "available",
+          "verified_at": null,
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        }
+      ],
+      "metadata": {
+        "recorded_at_precision": "unknown",
+        "recorded_at_source": null
+      },
+      "observations": [
+        {
+          "original_name": "Camera-001.mov",
+          "observed_at": "2026-11-23T21:30:00Z",
+          "root_id": "backup-nas"
+        },
+        {
+          "original_name": "Ingest-copy.mov",
+          "observed_at": "2026-11-23T21:30:00Z",
+          "root_id": "primary-nas"
+        }
+      ]
+    },
+    {
+      "asset_id": "blake3:3fcb6b6892dc26914910ba70dbff04e8db4e924f8d31a8191257af61c8c66bc0",
+      "size_bytes": 19,
+      "media_type": "video",
+      "recorded_at": "2026-11-23T14:25:02+01:00",
+      "duration_ms": 30000,
+      "device_id": "riverside",
+      "project_id": "demo",
+      "shoot_id": null,
+      "speaker_ids": [
+        "speaker-b"
+      ],
+      "locations": [
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Originals/session/track-b.mov",
+          "verification": "verified",
+          "availability": "available",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        }
+      ],
+      "metadata": {
+        "recorded_at_precision": "second",
+        "recorded_at_source": "recorder"
+      },
+      "session_id": "synthetic-session",
+      "track_role": "speaker",
+      "container": "mov",
+      "audio_tracks": [
+        {
+          "index": 0,
+          "codec": "aac",
+          "channels": 2,
+          "sample_rate": 48000,
+          "label": "b"
+        }
+      ],
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97,
+        "codec": "h264"
+      }
+    },
+    {
+      "asset_id": "blake3:3fcd2615be18dff38addeb7b01fd8bdac473cbde4a3ea8799b7d2264c93c2f93",
+      "size_bytes": 19,
+      "media_type": "video",
+      "recorded_at": "2026-11-23T14:25:02+01:00",
+      "duration_ms": 30000,
+      "device_id": "riverside",
+      "project_id": "demo",
+      "shoot_id": null,
+      "speaker_ids": [
+        "speaker-a"
+      ],
+      "locations": [
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Originals/session/track-a.mov",
+          "verification": "verified",
+          "availability": "available",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        }
+      ],
+      "metadata": {
+        "recorded_at_precision": "second",
+        "recorded_at_source": "recorder"
+      },
+      "session_id": "synthetic-session",
+      "track_role": "speaker",
+      "container": "mov",
+      "audio_tracks": [
+        {
+          "index": 0,
+          "codec": "aac",
+          "channels": 2,
+          "sample_rate": 48000,
+          "label": "a"
+        }
+      ],
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97,
+        "codec": "h264"
+      }
+    },
+    {
+      "asset_id": "blake3:46c821d4bca7ea590ee1b66bb27336dedaf8dea1dc5bade841d0254013c43b55",
+      "size_bytes": 21,
+      "media_type": "video",
+      "recorded_at": "2026-11-23T14:25:02+01:00",
+      "duration_ms": 30000,
+      "device_id": "riverside",
+      "project_id": "demo",
+      "shoot_id": null,
+      "speaker_ids": [],
+      "locations": [
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Originals/session/track-mix.mov",
+          "verification": "verified",
+          "availability": "available",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        }
+      ],
+      "metadata": {
+        "recorded_at_precision": "second",
+        "recorded_at_source": "recorder"
+      },
+      "session_id": "synthetic-session",
+      "track_role": "program",
+      "container": "mov",
+      "audio_tracks": [
+        {
+          "index": 0,
+          "codec": "aac",
+          "channels": 2,
+          "sample_rate": 48000,
+          "label": "mix"
+        }
+      ],
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97,
+        "codec": "h264"
+      }
+    },
+    {
+      "asset_id": "blake3:ce4d1f063b1388e09f49c9a9f4b566d8078326cef4acabf6090cb81016261f56",
+      "size_bytes": 19,
+      "media_type": "video",
+      "recorded_at": "2026-11-23T14:25:02+01:00",
+      "duration_ms": 30000,
+      "device_id": "riverside",
+      "project_id": "demo",
+      "shoot_id": null,
+      "speaker_ids": [
+        "speaker-c"
+      ],
+      "locations": [
+        {
+          "root_id": "primary-nas",
+          "relative_path": "Originals/session/track-c.mov",
+          "verification": "verified",
+          "availability": "available",
+          "verified_at": "2026-11-23T21:30:00Z",
+          "availability_checked_at": "2026-11-23T21:46:00Z"
+        }
+      ],
+      "metadata": {
+        "recorded_at_precision": "second",
+        "recorded_at_source": "recorder"
+      },
+      "session_id": "synthetic-session",
+      "track_role": "speaker",
+      "container": "mov",
+      "audio_tracks": [
+        {
+          "index": 0,
+          "codec": "aac",
+          "channels": 2,
+          "sample_rate": 48000,
+          "label": "c"
+        }
+      ],
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97,
+        "codec": "h264"
+      }
+    }
+  ]
+}

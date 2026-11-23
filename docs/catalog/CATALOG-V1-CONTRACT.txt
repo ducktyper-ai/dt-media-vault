@@ -1,0 +1,146 @@
+Media Vault catalog v1 and publication recovery
+Second draft for dt-video and the SOW-06 design review, 23 November 2026
+
+Catalog interface
+
+The read-only CLI returns one UTF-8 JSON object conforming to
+catalog-v1.schema.json. SQLite is local to Media Vault. The CLI takes
+--limit and --after <asset_id> as a keyset cursor in ascending asset ID
+order. next_after is the last emitted asset ID when another page exists,
+and null on the terminal page. Continue with the same filters and
+--revision <catalog_revision>. If a durable catalog change moved the
+revision, discard the partial export and restart. Revisions start at 1
+and increment in the transaction committing a change visible in the
+exported catalog, including asset facts, observations, location mappings or
+verification records. An availability probe and generated_at do not change
+the revision. A saved export remains a valid record of that revision.
+Availability can change even when the revision stays the same.
+
+Verification is stored history. Availability is a bounded, read-only
+probe of the admitted volume and safe location at query time. A known
+unmounted root is offline. An unknown root, inaccessible or changed path,
+or an inconclusive probe is unknown. Use available only when the current
+root identity and confined access can be established and there is no
+unresolved publication recovery. Include the probe timestamp even when
+the result is unknown. Default results contain verified locations only.
+The synthetic fixture represents an explicit include-unverified export.
+The strict schema validates output from the producer at the pinned version.
+A forward-compatible consumer applies the same structural requirements
+with four enum exceptions for otherwise well-formed nonempty strings.
+An unfamiliar verification or availability value makes that location
+ineligible. Treat an unfamiliar media_type as other, and an unfamiliar
+track_role as unknown. Known verification values still require their
+verified_at relationship. Unknown verification requires a structurally
+valid nullable timestamp and carries no verified status. Accept additive
+optional v1 fields and enum values with these fallbacks. Reject unknown
+schema majors. Validate each page as a unit. An invalid row, including
+a bad identifier, escape, or non-NFC path, rejects the whole page before
+any rows are exposed. Enum fallbacks are the only exceptions to strict
+producer validation for known fields.
+
+Check RFC 3339 formats as assertions. Z denotes an explicit UTC offset.
+Treat bare local timestamps or times with unknown UTC offsets as unknown.
+The recorded_at provenance and precision fields describe how the time was
+obtained. A date of day precision must not be treated as minute-level
+evidence. Unknown optional media facts are omitted. Measurements use
+integer milliseconds, pixels, hertz or channels, with fps as a positive
+finite number. Recorder or reviewed sidecar metadata can supply session
+and track labels. The initial in-process MOV/MP4 inspection is bounded to
+movie and track headers for time, duration and dimensions. Treat malformed
+or unsupported container facts as unknown. Use fuzz and fixture controls
+for parser bounds and offset arithmetic before widening scope.
+
+Path and open-time identity rule
+
+Resolve root_id only against the consumer's admitted mount registry, then
+verify the mounted volume identity. Check normalized NFC, slash-separated,
+relative paths. A parser rejects absolute, drive-prefixed, backslash,
+control-character, empty, dot and parent components. NFC and confined
+filesystem open are semantic checks in addition to JSON Schema. Display
+original_name as text only. Traverse the admitted root with no symlink
+following, and open the referenced regular file through the confined path.
+
+The consumer may select a row for staging only when it is both verified
+and available. An offline, unknown or unverified row in a saved export
+requires a fresh query before it is eligible. The same rule applies to
+a live row. A saved verified_at timestamp grants no open-time authority.
+
+Media Vault owns open-time verification. The proposed command is
+media-vault catalog stage <asset_id> --root <root_id> --path <relative_path>
+--to <admitted-staging-dir>. The explicit path disambiguates copies on a
+single root. The destination must be within a configured private staging
+root, validated without symlink following. The command rechecks that the
+catalog still has a verified location with no unresolved recovery, then
+confines the source open to the admitted mounted volume and checks source
+identity before and after reading. Stream the open file to exclusive
+private staging while checking complete BLAKE3 and byte count against
+asset_id and size_bytes. Verify the resulting staged bytes before atomic
+no-clobber publication. On success print JSON with asset_id, staged_path
+and size_bytes. dt-video opens only the returned staged file. A
+disconnect, wrong volume, replaced path, unreadable data, or digest
+mismatch makes that source unavailable and returns no staged path.
+
+The staging cache may key entries by asset_id. Reuse verified bytes only
+from the vault-controlled cache with stable file identity, verified
+provenance and a read-only consumer view. The stage command still
+revalidates the chosen mounted source under the present contract. If the
+cache's immutability or identity cannot be proved, reverify the cached
+bytes or stage afresh. The consumer gets no writable alias to a reused
+entry. Publish cache entries atomically by digest and share no partial
+copy with an editor.
+
+Publication durability and recovery
+
+V1 admits one writer host and one writer process. Hold a lease in local
+app state, use an exclusive writer credential or ACL on the destination,
+and reject configurations that allow another host to write the archive.
+Shared-writer support requires a separate destination fencing design.
+
+Record durable local publication intent before writing media. Stage with
+exclusive creation on the destination filesystem. Flush and hash the
+staged bytes, publish with no replacement, then durably commit the
+destination directory entry according to the qualified backend. Reopen
+through the admitted root, use the backend's supported independent-read
+procedure, and confirm size and full digest before committing a verified
+location and audit receipt in one durable local transaction. For local
+Darwin, qualify F_FULLFSYNC for the staged file, directory sync after
+rename and a fresh cache-disabled read where supported. For SMB or NFS,
+qualify the actual server's flush, rename, directory-entry persistence
+and independent reread semantics, including reconnect and restart. A
+successful client syscall alone does not qualify server-side persistence.
+If a backend or volume cannot meet the contract, leave the plan entry
+incomplete and the source untouched.
+
+Recover both directions after interruption, restart or uncertain storage:
+
+- A visible copy with no receipt stays outside verified results. Replay
+  may adopt it only after volume identity, root confinement, publication
+  durability and complete digest and size verification succeed.
+- A surviving receipt with a missing, replaced or unreachable copy stays
+  in audit history. It does not authorize export as verified available.
+  Reconcile by rechecking the admitted root and bytes. If missing or
+  wrong, record the location as unverified and the plan entry as
+  incomplete, preserve the source and retain the prior receipt.
+- When recovery is pending, catalog query withholds availability. A
+  read-only query does not repair SQLite or the archive. Explicit
+  verification or replay records the outcome with one current result per
+  plan entry and a retained history of transitions.
+
+Qualify failures before rename, after rename before receipt, and after a
+receipt followed by destination loss or replacement. Also qualify network
+disconnect, remount, repeated requests, and same-path same-size
+replacement. Source retirement stays outside the first release.
+
+Acceptance
+
+catalog-v1-example.json contains two roots, duplicate ingest observations,
+an unverified location, an unknown timestamp and three speakers plus one
+program track. catalog-v1-escape.json contains an invalid traversal path.
+catalog-v1-open-cases.json gives synthetic bytes and expected decisions
+for the same live or saved row after a wrong mount, disconnect or
+same-size replacement. These are design fixtures. The future Go and
+TypeScript gates must run both structural and open-time acceptance
+checks at the same pinned contract version. Publish the final contract under docs/catalog and tag it catalog-v1.0.0
+after both design review and consumer agreement. dt-video vendors the
+files at that tag and records the immutable commit used. The tag is
+proposed here and has not been created.
