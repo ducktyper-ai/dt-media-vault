@@ -96,7 +96,11 @@ migrate:
 
 .PHONY: verify verify-source verify-migration
 # The owning source gate is offline. Never depend on a NAS operation here.
-verify: verify-source
+verify: verify-go
+
+.PHONY: verify-go
+verify-go:
+	bash scripts/verify-go.sh
 
 verify-source:
 	bash scripts/verify-source.sh
