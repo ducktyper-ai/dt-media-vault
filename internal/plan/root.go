@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -29,8 +30,18 @@ type RootIdentity struct {
 	Inode  uint64 `json:"inode"`
 }
 
+type fileIdentity struct {
+	device uint64
+	inode  uint64
+}
+
+func identity(info unix.Stat_t) fileIdentity {
+	return fileIdentity{device: uint64(info.Dev), inode: uint64(info.Ino)}
+}
+
 type root struct {
-	file *os.File
+	file      *os.File
+	ancestors []fileIdentity
 	RootIdentity
 }
 
@@ -45,6 +56,8 @@ func openRoot(spec RootSpec) (*root, error) {
 	if err != nil {
 		return nil, err
 	}
+	var info unix.Stat_t
+	var ancestors []fileIdentity
 	for _, part := range strings.Split(strings.TrimPrefix(spec.Path, "/"), "/") {
 		child, openErr := unix.Openat(fd, part, directoryFlags, 0)
 		unix.Close(fd)
@@ -52,13 +65,13 @@ func openRoot(spec RootSpec) (*root, error) {
 			return nil, fmt.Errorf("root %q unavailable: %w", spec.ID, openErr)
 		}
 		fd = child
+		if err := unix.Fstat(fd, &info); err != nil {
+			unix.Close(fd)
+			return nil, fmt.Errorf("check root %q ancestry: %w", spec.ID, err)
+		}
+		ancestors = append(ancestors, identity(info))
 	}
 	dir := os.NewFile(uintptr(fd), spec.Path)
-	var info unix.Stat_t
-	if err := unix.Fstat(fd, &info); err != nil {
-		dir.Close()
-		return nil, err
-	}
 	if uint64(info.Dev) != spec.Device {
 		dir.Close()
 		return nil, fmt.Errorf("root %q unavailable: mounted device does not match", spec.ID)
@@ -81,7 +94,7 @@ func openRoot(spec RootSpec) (*root, error) {
 		dir.Close()
 		return nil, fmt.Errorf("root %q unavailable: marker does not match", spec.ID)
 	}
-	return &root{file: dir, RootIdentity: RootIdentity{
+	return &root{file: dir, ancestors: ancestors, RootIdentity: RootIdentity{
 		ID: spec.ID, Device: spec.Device, Inode: uint64(info.Ino),
 	}}, nil
 }
@@ -110,18 +123,19 @@ func openRegular(parent int, name string) (*os.File, error) {
 	return file, nil
 }
 
-func checkRoot(spec RootSpec, expected RootIdentity) error {
+func checkRoot(spec RootSpec, expected *root) error {
 	current, err := openRoot(spec)
 	if err != nil {
 		return err
 	}
 	defer current.file.Close()
-	if current.RootIdentity != expected {
+	if current.RootIdentity != expected.RootIdentity || !slices.Equal(current.ancestors, expected.ancestors) {
 		return fmt.Errorf("root %q changed during planning", spec.ID)
 	}
 	return nil
 }
 
-func rootOverlap(a, b string) bool {
-	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+func rootOverlap(a, b *root) bool {
+	return slices.Contains(a.ancestors, b.ancestors[len(b.ancestors)-1]) ||
+		slices.Contains(b.ancestors, a.ancestors[len(a.ancestors)-1])
 }

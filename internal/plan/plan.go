@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -60,6 +59,7 @@ type Plan struct {
 	CopyBytes     int64         `json:"proposed_copy_bytes"`
 	Rows          []Observation `json:"rows"`
 	Issues        []Issue       `json:"issues"`
+	Skipped       []Issue       `json:"skipped"`
 }
 
 type Result struct {
@@ -70,8 +70,8 @@ type Result struct {
 // Build opens both admitted roots read-only and inspects proposed destinations.
 // The returned observations describe a plan only. They authorize no writes.
 func Build(options Options) (Result, error) {
-	if options.Ingest.ID == options.Archive.ID || rootOverlap(options.Ingest.Path, options.Archive.Path) {
-		return Result{}, fmt.Errorf("ingest and archive roots must be distinct and disjoint")
+	if options.Ingest.ID == options.Archive.ID {
+		return Result{}, fmt.Errorf("ingest and archive root IDs must differ")
 	}
 	date, device, err := layout(options)
 	if err != nil {
@@ -87,18 +87,19 @@ func Build(options Options) (Result, error) {
 		return Result{}, err
 	}
 	defer archive.file.Close()
-	if ingest.Device == archive.Device && ingest.Inode == archive.Inode {
-		return Result{}, fmt.Errorf("ingest and archive resolve to the same directory")
+	if rootOverlap(ingest, archive) {
+		return Result{}, fmt.Errorf("ingest and archive root directories must be disjoint")
 	}
 
 	plan := Plan{
 		SchemaVersion: 1, Ingest: ingest.RootIdentity, Archive: archive.RootIdentity,
 		RecordingDate: optional(options.Date), DeviceID: optional(options.Device),
-		ProjectID: optional(options.Project), Rows: []Observation{}, Issues: []Issue{},
+		ProjectID: optional(options.Project), Rows: []Observation{}, Issues: []Issue{}, Skipped: []Issue{},
 	}
 	scan(ingest.file, "", ingest.Device, 0, &plan)
 	slices.SortFunc(plan.Rows, func(a, b Observation) int { return strings.Compare(a.Path, b.Path) })
 	first := make(map[string]Observation)
+	destinations := newDestinationInspector(archive)
 	for i := range plan.Rows {
 		row := &plan.Rows[i]
 		if previous, ok := first[row.AssetID]; ok {
@@ -108,7 +109,7 @@ func Build(options Options) (Result, error) {
 			continue
 		}
 		row.TargetPath = targetPath(row.Path, row.AssetID, date, device)
-		row.Action, err = inspectDestination(archive, row.TargetPath, row.AssetID)
+		row.Action, err = destinations.inspect(row.TargetPath, row.AssetID)
 		if err != nil {
 			plan.issue(row.TargetPath, "destination: "+err.Error())
 		}
@@ -117,10 +118,10 @@ func Build(options Options) (Result, error) {
 		}
 		first[row.AssetID] = *row
 	}
-	if err := checkRoot(options.Ingest, plan.Ingest); err != nil {
+	if err := checkRoot(options.Ingest, ingest); err != nil {
 		return Result{}, err
 	}
-	if err := checkRoot(options.Archive, plan.Archive); err != nil {
+	if err := checkRoot(options.Archive, archive); err != nil {
 		return Result{}, err
 	}
 	slices.SortFunc(plan.Issues, func(a, b Issue) int {
@@ -129,6 +130,7 @@ func Build(options Options) (Result, error) {
 		}
 		return strings.Compare(a.Reason, b.Reason)
 	})
+	slices.SortFunc(plan.Skipped, func(a, b Issue) int { return strings.Compare(a.Path, b.Path) })
 	plan.Complete = len(plan.Rows) > 0 && len(plan.Issues) == 0
 	canonical, err := json.Marshal(plan)
 	if err != nil {
@@ -212,6 +214,10 @@ func scan(directory *os.File, prefix string, device uint64, depth int, plan *Pla
 			plan.issue(relative, "nested volume is outside the admitted root")
 			continue
 		}
+		if info.Mode&unix.S_IFMT == unix.S_IFREG && (name == ".DS_Store" || strings.HasPrefix(name, "._")) {
+			plan.Skipped = append(plan.Skipped, Issue{Path: relative, Reason: "macOS metadata file"})
+			continue
+		}
 		switch info.Mode & unix.S_IFMT {
 		case unix.S_IFDIR:
 			child, err := unix.Openat(fd, name, directoryFlags, 0)
@@ -249,10 +255,32 @@ func scan(directory *os.File, prefix string, device uint64, depth int, plan *Pla
 	}
 }
 
+type fileStamp struct {
+	fileIdentity
+	mode  uint32
+	size  int64
+	mtime unix.Timespec
+	ctime unix.Timespec
+}
+
+func snapshot(info unix.Stat_t) fileStamp {
+	return fileStamp{
+		fileIdentity: identity(info), mode: uint32(info.Mode), size: info.Size,
+		mtime: info.Mtim, ctime: info.Ctim,
+	}
+}
+
+func (stamp fileStamp) hasChangeTime() bool {
+	return stamp.ctime != (unix.Timespec{})
+}
+
 func hashFile(parent int, name, relative string, expected unix.Stat_t) (Observation, error) {
-	// The directory stat prevents opening a known device, FIFO, or similar input.
 	if expected.Mode&unix.S_IFMT != unix.S_IFREG || expected.Size < 0 || expected.Size > maxSafeInteger {
 		return Observation{}, fmt.Errorf("file is not a supported regular input")
+	}
+	wanted := snapshot(expected)
+	if !wanted.hasChangeTime() {
+		return Observation{}, fmt.Errorf("filesystem did not report file change time")
 	}
 	file, err := openRegular(parent, name)
 	if err != nil {
@@ -260,78 +288,28 @@ func hashFile(parent int, name, relative string, expected unix.Stat_t) (Observat
 	}
 	defer file.Close()
 	var opened unix.Stat_t
-	if err := unix.Fstat(int(file.Fd()), &opened); err != nil ||
-		opened.Dev != expected.Dev || opened.Ino != expected.Ino || opened.Size != expected.Size {
-		return Observation{}, fmt.Errorf("file identity changed before hashing")
-	}
-	before, err := file.Stat()
-	if err != nil {
-		return Observation{}, err
+	if err := unix.Fstat(int(file.Fd()), &opened); err != nil || snapshot(opened) != wanted {
+		return Observation{}, fmt.Errorf("file identity or change metadata changed before hashing")
 	}
 	hash := blake3.New(32, nil)
-	size, err := io.Copy(hash, io.LimitReader(file, expected.Size+1))
+	size, err := io.Copy(hash, io.LimitReader(file, wanted.size+1))
 	if err != nil {
 		return Observation{}, err
 	}
-	after, err := file.Stat()
-	if err != nil {
-		return Observation{}, err
-	}
-	var current unix.Stat_t
-	if err := unix.Fstatat(parent, name, &current, unix.AT_SYMLINK_NOFOLLOW); err != nil ||
-		current.Dev != expected.Dev || current.Ino != expected.Ino || current.Mode&unix.S_IFMT != unix.S_IFREG ||
-		size != expected.Size || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
-		return Observation{}, fmt.Errorf("file changed while hashing")
+	if size != wanted.size || !stableFile(parent, name, file, wanted) {
+		return Observation{}, fmt.Errorf("file identity or change metadata changed while hashing")
 	}
 	return Observation{
 		Path: relative, AssetID: "blake3:" + hex.EncodeToString(hash.Sum(nil)),
-		SizeBytes: size, SourceInode: uint64(opened.Ino), ModifiedAt: before.ModTime().UTC().Format(time.RFC3339Nano),
+		SizeBytes: size, SourceInode: wanted.inode,
+		ModifiedAt: time.Unix(wanted.mtime.Sec, wanted.mtime.Nsec).UTC().Format(time.RFC3339Nano),
 	}, nil
 }
 
-func inspectDestination(archive *root, target, assetID string) (string, error) {
-	parts := strings.Split(target, "/")
-	parent := int(archive.file.Fd())
-	defer func() {
-		if parent != int(archive.file.Fd()) {
-			unix.Close(parent)
-		}
-	}()
-	for _, name := range parts[:len(parts)-1] {
-		fd, err := unix.Openat(parent, name, directoryFlags, 0)
-		if errors.Is(err, unix.ENOENT) {
-			return "copy", nil
-		}
-		if err != nil {
-			return "conflict", err
-		}
-		if parent != int(archive.file.Fd()) {
-			unix.Close(parent)
-		}
-		parent = fd
-		var dir unix.Stat_t
-		if err := unix.Fstat(fd, &dir); err != nil || uint64(dir.Dev) != archive.Device {
-			return "conflict", fmt.Errorf("archive path leaves the admitted device")
-		}
-	}
-	name := parts[len(parts)-1]
-	var occupant unix.Stat_t
-	err := unix.Fstatat(parent, name, &occupant, unix.AT_SYMLINK_NOFOLLOW)
-	if errors.Is(err, unix.ENOENT) {
-		return "copy", nil
-	}
-	if err != nil {
-		return "conflict", err
-	}
-	if uint64(occupant.Dev) != archive.Device {
-		return "conflict", fmt.Errorf("archive file leaves the admitted device")
-	}
-	row, err := hashFile(parent, name, target, occupant)
-	if err != nil {
-		return "conflict", err
-	}
-	if row.AssetID != assetID {
-		return "conflict", fmt.Errorf("existing content has a different digest")
-	}
-	return "reuse", nil
+func stableFile(parent int, name string, file *os.File, before fileStamp) bool {
+	var descriptor, named unix.Stat_t
+	return unix.Fstat(int(file.Fd()), &descriptor) == nil &&
+		snapshot(descriptor) == before &&
+		unix.Fstatat(parent, name, &named, unix.AT_SYMLINK_NOFOLLOW) == nil &&
+		snapshot(named) == before
 }

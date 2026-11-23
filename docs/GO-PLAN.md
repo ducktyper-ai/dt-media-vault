@@ -13,7 +13,9 @@ logical IDs. Each root must already contain a regular
 `.media-vault-root` file with its exact logical ID and one newline.
 The planner checks markers and devices and never creates them. Runtime
 admits the actual volume configuration. A missing mount or a mismatch
-fails before a plan is emitted.
+fails before a plan is emitted. Device numbers identify the current mount,
+so Runtime must readmit them after remount. The root marker and the
+device/inode ancestry of the opened directories must also match.
 
 ```sh
 media-vault plan --ingest "$INGEST_ROOT" --ingest-id "$INGEST_ID" \
@@ -26,6 +28,11 @@ The last three flags carry known batch metadata. Leave them out when
 unknown. An empty scan or a conflict produces an incomplete plan and a
 nonzero exit. Relative source paths are preserved as observations. Target
 paths use a portable stem, a full digest, and device and date directories.
+Existing case-folded or Unicode-equivalent destination names are reported
+as conflicts. Regular AppleDouble and .DS_Store files are reported as
+skipped, with their source bytes retained. The scan treats a file whose
+identity, size, modification time, or change time shifts as unresolved.
+The intended NAS backend still needs qualification of those read signals.
 The plan digest is SHA-256 over the compact JSON encoding of the inner
 plan object in its defined field order.
 
