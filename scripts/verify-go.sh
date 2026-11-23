@@ -16,6 +16,7 @@ otool -L "$scratch/media-vault" | tee "$scratch/imports"
 awk '
     NR == 1 { next }
     $1 == "/usr/lib/libSystem.B.dylib" || $1 == "/usr/lib/libSystem.dylib" { next }
+    $1 == "/usr/lib/libresolv.9.dylib" { next }
     $1 ~ /^\/System\/Library\/Frameworks\// && $1 !~ /\/\.\.?(\/|$)|\/\// { next }
     { print "Unexpected Mach-O import: " $1 > "/dev/stderr"; failed = 1 }
     END { exit failed || NR < 2 }

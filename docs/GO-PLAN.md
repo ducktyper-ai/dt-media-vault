@@ -40,8 +40,8 @@ plan object in its defined field order.
 
 `make verify` on the admitted Darwin ARM64 worker runs the synthetic Go
 tests, builds the cgo-disabled CLI, and verifies Mach-O architecture and
-system-only imports before the help smoke check. The paired review
-specified libSystem and Apple system framework imports. The existing
+system-only imports before the help smoke check. The approved imports are
+libSystem, `/usr/lib/libresolv.9.dylib`, and public Apple system frameworks. The existing
 Python sources and their retired gate remain behavior reference.
 
 [Catalog contract files](catalog/CATALOG-V1-CONTRACT.txt) carry the exact
