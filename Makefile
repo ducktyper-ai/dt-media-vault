@@ -327,3 +327,13 @@ link-project:
 
 
 .DEFAULT_GOAL := help
+
+.PHONY: release release-candidate
+RELEASE_DIR ?= dist
+export RELEASE_DIR MEDIA_VAULT_PYTHON
+
+release: ## Build the checked Darwin ARM64 archive from the exact upstream main commit
+	@bash scripts/release-darwin.sh release
+
+release-candidate: ## Build a Darwin ARM64 archive for verifying an exact review commit
+	@bash scripts/release-darwin.sh candidate

@@ -37,6 +37,12 @@ LOCK_SHA256 = "321934de86581ce858defa66c9fa9af70ba48a23eb687bf3524b006a5366da4e"
 LOCK_PRIMARY_COMMIT = "73fd96105173fa2b90c626127a0c1ebd84687909"
 # Bind only after actual reviewed PR4 merge and immutable source readback.
 LOCK_PHASE_BASELINE = "9093d47ae0e07f628385dc1ebf3e696b922f6204"
+RELEASE_BASELINE = "aeab77f8ca571ddf6a84557f1fa8decccdbe8d01"
+RELEASE_DOCS = {"CHANGELOG.md", "docs/RUN.md"}
+RELEASE_PATHS = RELEASE_DOCS | {
+    "Makefile", "scripts/release-build.lock", "scripts/release-runtime.lock",
+    "scripts/release-darwin.sh", "scripts/verify-source.sh",
+}
 MEMO = "docs/design/sow-01-media-vault-design.md"
 INDEX = "docs/evidence/INDEX.json"
 ARCHIVE_BYTES = 30132
@@ -64,7 +70,8 @@ def lint_python(text):
 
 
 def check_document(text, name, tracked):
-    require(SOW in text.splitlines(), "missing standalone SOW line")
+    marker = PUBLIC_SOW if name in RELEASE_DOCS else SOW
+    require(marker in text.splitlines(), "missing standalone SOW line")
     require(not any(line.rstrip() != line for line in text.splitlines()),
             "document trailing whitespace")
     fences = [line for line in text.splitlines() if line.startswith("```")]
@@ -555,9 +562,15 @@ def main():
     require(lock_blob.returncode == 0, "cannot read merged lock blob")
     check_lock_phase(set(filter(None, lock_paths.stdout.split("\0"))), lock_blob.stdout)
     check_lock_commit_messages(CLEANUP_BASELINE, LOCK_PHASE_BASELINE)
-    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, "HEAD"])
+    require(run(["git", "merge-base", "--is-ancestor", RELEASE_BASELINE, "HEAD"]).returncode == 0,
+            "release phase ancestry mismatch")
+    cleanup = run(["git", "diff", "--name-only", "-z", LOCK_PHASE_BASELINE, RELEASE_BASELINE])
     require(cleanup.returncode == 0, "cannot compare cleanup phase baseline")
     check_cleanup_scope(set(filter(None, cleanup.stdout.split("\0"))))
+    release = run(["git", "diff", "--name-only", "-z", RELEASE_BASELINE, "HEAD"])
+    require(release.returncode == 0, "cannot compare release phase")
+    require(set(filter(None, release.stdout.split("\0"))) == RELEASE_PATHS,
+            "release phase differs from the approved path set")
     require(MEMO not in tracked, "archived memo still tracked")
     require(INDEX in tracked, "archive index is not tracked")
     require(changed <= tracked | {MEMO}, "deleted source outside archived memo")
