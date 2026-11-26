@@ -116,27 +116,23 @@ The toolkit automatically detects duplicates and keeps the best copy based on pr
 3. Files in `/Projects/aipe` (structured projects)
 4. Other project files
 
-## Commands Reference
+## Historical commands
 
-### Setup
-- `make setup` - Create environment and install dependencies
-- `make check-volumes` - Verify source/target volumes exist
+### Setup and analysis
 
-### Analysis (This Week)
-- `make analyze` - Full analysis with hash computation (4-6 hours)
-- `make analyze-dry` - Quick preview without hashing
-- `make report` - Generate HTML summary report
-- `make duplicates` - Show duplicate statistics
+- `make setup` prepares the legacy Python environment.
+- `make check-volumes`, `make analyze`, and `make analyze-dry` are disabled.
+- The historical `make report` and `make duplicates` commands have no targets in the current Makefile.
 
-### Migration (When NAS Arrives)
-- Structure creation is unavailable pending approved tools.
-- `make migrate` - Execute migration (8-12 hours)
-- Migration preview is unavailable pending approved tools.
-- `make verify-migration` - Legacy NAS copy check; approved access required, known limitations
+### Migration
 
-### Utilities
-- `make clean` - Clean analysis results and cache
-- `make verify` - Full offline source/design gate: lint, tests and document checks
+- `make migrate` and `make verify-migration` are disabled.
+- Structure creation and migration preview require approved replacement tools.
+
+### Verification
+
+The Python source gate was retired. The current `make verify` runs the
+[Go planner gate](docs/GO-PLAN.md).
 
 ## What Gets Excluded
 
@@ -177,26 +173,18 @@ ls -la /Volumes/
 ```
 
 ### "Analysis taking too long"
-```bash
-# Run in background with nohup
-nohup make analyze > analysis.log 2>&1 &
-# Check progress
-tail -f analysis.log
-```
+
+The background analysis recipe used `make analyze`, which is disabled.
 
 ### "Migration failed partway"
-```bash
-# Just run migrate again - it skips existing files
-make migrate
-```
+
+`make migrate` is disabled. Preserve the source and destination and retain
+the failure evidence for Runtime.
 
 ### "Verification shows missing files"
-```bash
-# Check the verification_errors.log
-cat verification_errors.log
-# Re-run migration for failed files
-make migrate
-```
+
+Preserve the original files and any existing `verification_errors.log` for
+review. The legacy `make verify-migration` and `make migrate` targets are disabled.
 
 ## Timeline
 
