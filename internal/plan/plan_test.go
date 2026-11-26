@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
-	"lukechampine.com/blake3"
 )
 
 func fixtureRoot(t *testing.T, id string) RootSpec {
@@ -117,6 +116,7 @@ func TestSymlinkAndWrongDeviceRefused(t *testing.T) {
 func TestCatalogFixtureAssetIDs(t *testing.T) {
 	type item struct {
 		AssetID    string   `json:"asset_id"`
+		SizeBytes  int64    `json:"size_bytes"`
 		TrackRole  string   `json:"track_role"`
 		SpeakerIDs []string `json:"speaker_ids"`
 	}
@@ -127,7 +127,14 @@ func TestCatalogFixtureAssetIDs(t *testing.T) {
 	if len(catalog.Items) != 5 {
 		t.Fatalf("expected five fixture items, got %d", len(catalog.Items))
 	}
-	for _, item := range catalog.Items {
+	ingest, archive := fixtureRoot(t, "ingest"), fixtureRoot(t, "archive")
+	type expectedAsset struct {
+		id   string
+		size int64
+	}
+	expected := make(map[string]expectedAsset)
+	sizes := make(map[string]int64)
+	for i, item := range catalog.Items {
 		payload := "fixture-old"
 		switch item.TrackRole {
 		case "speaker":
@@ -141,31 +148,67 @@ func TestCatalogFixtureAssetIDs(t *testing.T) {
 		default:
 			t.Fatalf("unexpected fixture track role %q", item.TrackRole)
 		}
-		if digest := fmt.Sprintf("blake3:%x", blake3.Sum256([]byte(payload))); digest != item.AssetID {
-			t.Fatalf("asset fixture digest mismatch: %s != %s", digest, item.AssetID)
-		}
+		name := fmt.Sprintf("catalog-%d.mov", i)
+		write(t, filepath.Join(ingest.Path, name), payload)
+		expected[name] = expectedAsset{item.AssetID, item.SizeBytes}
+		sizes[item.AssetID] = item.SizeBytes
 	}
 	var scenarios struct {
 		AssetID string `json:"asset_id"`
 		Cases   []struct {
-			Payload string `json:"opened_utf8"`
-			AssetID string `json:"opened_asset_id"`
+			Name    string  `json:"name"`
+			Payload *string `json:"opened_utf8"`
+			AssetID string  `json:"opened_asset_id"`
 		} `json:"cases"`
 	}
 	readJSON(t, "../../docs/catalog/catalog-v1-open-cases.json", &scenarios)
+	selectedSize, ok := sizes[scenarios.AssetID]
+	if !ok {
+		t.Fatalf("selected asset %q is missing from the catalog fixture", scenarios.AssetID)
+	}
 	replacementCases := 0
-	for _, item := range scenarios.Cases {
-		if item.AssetID == "" {
+	originalCases := 0
+	for i, scenario := range scenarios.Cases {
+		if scenario.Payload == nil {
+			if scenario.AssetID != "" {
+				t.Fatalf("%s has an opened asset ID without payload bytes", scenario.Name)
+			}
 			continue
 		}
-		replacementCases++
-		digest := fmt.Sprintf("blake3:%x", blake3.Sum256([]byte(item.Payload)))
-		if digest != item.AssetID || digest == scenarios.AssetID {
-			t.Fatalf("replacement fixture digest is invalid: %s", digest)
+		id := scenarios.AssetID
+		if scenario.AssetID == "" {
+			originalCases++
+		} else {
+			replacementCases++
+			id = scenario.AssetID
+			if id == scenarios.AssetID {
+				t.Fatalf("%s must have a different asset ID", scenario.Name)
+			}
 		}
+		name := fmt.Sprintf("open-%d.mov", i)
+		write(t, filepath.Join(ingest.Path, name), *scenario.Payload)
+		expected[name] = expectedAsset{id, selectedSize}
 	}
-	if replacementCases != 1 {
-		t.Fatalf("expected one replacement fixture, got %d", replacementCases)
+	if originalCases == 0 || replacementCases != 1 {
+		t.Fatalf("expected original payloads and one replacement, got %d originals and %d replacements", originalCases, replacementCases)
+	}
+
+	result, err := Build(Options{Ingest: ingest, Archive: archive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Plan.Complete || len(result.Plan.Rows) != len(expected) {
+		t.Fatalf("expected a complete plan of %d fixture files, got %d rows and issues %+v", len(expected), len(result.Plan.Rows), result.Plan.Issues)
+	}
+	for _, row := range result.Plan.Rows {
+		want, ok := expected[row.Path]
+		if !ok {
+			t.Fatalf("unexpected fixture row %q", row.Path)
+		}
+		if row.AssetID != want.id || row.SizeBytes != want.size {
+			t.Errorf("%s: planner returned %s (%d bytes), want %s (%d bytes)", row.Path, row.AssetID, row.SizeBytes, want.id, want.size)
+		}
+		delete(expected, row.Path)
 	}
 }
 
