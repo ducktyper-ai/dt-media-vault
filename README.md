@@ -1,116 +1,24 @@
-# Media Archive Migration Toolkit
+# Media Vault
 
-sow: dt-media-vault-SOW-01
+Media Vault currently provides a read-only Go command for planning an archive
+migration. `media-vault plan` hashes ingest files, reports duplicates, and
+inspects proposed paths under a separate archive root. It outputs a JSON plan
+and leaves ingest and archive files intact.
 
-Legacy storage Make targets are disabled unconditionally, including with explicit
-roots or approval flags, and with prerequisites marked old using `make -o`.
-Each storage recipe refuses on its first line. Storage-volume defaults have been
-removed. The historical commands below are reference material; replacement tools need separate scope and
-review before any storage session.
+- [Getting started with synthetic files](README_GETTING_STARTED.md)
+- [Planner inputs, output and verification](docs/GO-PLAN.md)
+- [Draft catalog contract](docs/catalog/CATALOG-V1-CONTRACT.txt)
 
+Legacy Python storage targets are disabled. Real storage requires separate
+Runtime admission and operator approval. Preserve original NAS and backup
+content. The [historical design record](docs/evidence/INDEX.json) documents the
+legacy verifier's known limitations.
 
-Maintainer status: `make verify` runs the offline source/design controls and
-the verifier safety suite on synthetic local files. It checks verifier failures,
-entry coverage and CLI status without accessing real media or the NAS. The historical migration
-workflow below requires separate operator approval; current migration and NAS
-verification have known safety defects documented in the
-[historical design record](docs/evidence/INDEX.json).
-Keep original NAS and backup content intact. Duplicates are reported only;
-passing a source gate or migration check never authorizes cleanup.
+<details>
+<summary>Historical Python toolkit reference</summary>
 
-A comprehensive system for migrating, organizing, and managing 4TB+ media archives with automatic deduplication, metadata extraction, and hash verification.
-
-## Features
-
-- **Automated Analysis**: Scans existing archive, extracts metadata from video files
-- **Duplicate Detection**: Uses BLAKE3 hashing to identify exact duplicates
-- **Smart Organization**: Organizes by device and date while preserving project structures
-- **Hash Verification**: Ensures every file copied correctly
-- **Progress Tracking**: Rich progress bars and detailed logging
-- **Resumable**: Can restart migration if interrupted
-- **Safe**: Never modifies source files, only copies to target
-
-## Quick Start
-
-### 1. Setup
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/media-archive-toolkit.git
-cd media-archive-toolkit
-
-# Create environment and install dependencies
-make setup
-
-# Activate environment
-source .venv/bin/activate
-```
-
-### 2. Configure
-
-Edit `config/device_mappings.yaml` to match your setup:
-
-```yaml
-devices:
-  sony-fx-3: CAM_fx3
-  sony-fx-30: CAM_fx30
-  # ... add your devices
-```
-
-### 3. Analyze (This Week - Before NAS Arrives)
-
-```bash
-# Dry run first (quick preview)
-make analyze-dry
-
-# Full analysis (4-6 hours)
-make analyze
-```
-
-This creates:
-- `analysis_results/migration_manifest.json` - Complete migration plan
-- `analysis_results/duplicates_report.csv` - All duplicate files found
-- `analysis_results/analysis_summary.txt` - Human-readable summary
-
-### 4. Review Results
-
-```bash
-# View summary
-cat analysis_results/analysis_summary.txt
-
-# Check duplicates
-make duplicates
-
-# Generate HTML report (optional)
-make report
-```
-
-### 5. Migrate (When NAS Arrives)
-
-```bash
-# Connect your NAS, verify it's mounted at /Volumes/RodNAS
-
-# Create folder structure on NAS
-# No approved structure writer is available.
-
-# Dry run first (preview)
-# No migration preview target is available.
-
-# Execute migration (8-12 hours)
-# IMPORTANT: Run in tmux/screen so it doesn't stop if connection drops
-tmux new-session -s migration
-make migrate
-```
-
-### 6. Verify
-
-```bash
-# Verify all files copied correctly
-make verify-migration
-```
-
-The legacy verifier can report success incorrectly. Independent restore evidence
-and operator review are required; do not delete, move or rename source content.
+The following material describes the retired workflow. Use the Go planner
+guide above for current commands.
 
 ## Project Structure
 
@@ -331,3 +239,5 @@ Built following the QuackVerse development pattern with UV + pyproject.toml + Ma
 
 **Remember**: Preserve source, NAS and backup content. Backup protection requires
 independently verified restores; a success message never authorizes cleanup.
+
+</details>

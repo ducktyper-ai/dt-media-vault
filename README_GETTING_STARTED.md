@@ -1,232 +1,48 @@
-# Getting Started Guide
+# Try the Media Vault Go planner
 
-sow: dt-media-vault-SOW-01
+Use disposable files to run the read-only planner and inspect its JSON output.
+The source checkout is the current distribution. Darwin ARM64 release
+packaging is pending.
 
-Legacy storage Make targets are disabled unconditionally, including with explicit
-roots or approval flags, and with prerequisites marked old using `make -o`.
-Each storage recipe refuses on its first line. Storage-volume defaults have been
-removed. The historical commands below are reference material; replacement tools need separate scope and
-review before any storage session.
+## Verify and build from source
 
-
-`make verify` runs offline source/design controls and verifier safety tests on
-synthetic local files, without real media or NAS access. The existing declared
-BLAKE3, Rich and Click dependencies must be available; the gate installs nothing.
-The historical migration workflow below requires separate operator approval.
-Its NAS check is `make verify-migration` and has known correctness limitations;
-see the [historical design record](docs/evidence/INDEX.json).
-Preserve all original NAS and backup content. No verification result authorizes
-deletion, moving or renaming, and duplicates are reported only.
-
-## Prerequisites
-
-- **macOS** (tested on 15.4.1)
-- **Python 3.10+** (will be installed via UV)
-- **UV** package manager: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **ffmpeg** (optional, for video metadata): `brew install ffmpeg`
-
-## Step-by-Step Setup
-
-### 1. Clone Repository
+Runtime runs this block from the repository root on the admitted Darwin ARM64
+ENG-UK worker, as its unprivileged gate account, without sudo. Use the Go
+version specified in `go.mod` and the dependencies pinned by `go.sum`.
 
 ```bash
-cd ~/Projects  # or wherever you keep code
-git clone https://github.com/yourusername/media-archive-toolkit.git
-cd media-archive-toolkit
+(
+  set -eu
+  export CGO_ENABLED=0 GOTOOLCHAIN=local GOWORK=off
+  make verify
+
+  scratch=$(mktemp -d "${TMPDIR:-/tmp}/media-vault-demo.XXXXXXXX")
+  scratch=$(cd "$scratch" && pwd -P)
+  go build -mod=readonly -trimpath -o "$scratch/media-vault" ./cmd/media-vault
+  "$scratch/media-vault" --help
+
+  mkdir "$scratch/ingest" "$scratch/archive"
+  printf 'demo-ingest\n' > "$scratch/ingest/.media-vault-root"
+  printf 'demo-archive\n' > "$scratch/archive/.media-vault-root"
+  printf 'synthetic clip\n' > "$scratch/ingest/clip.mov"
+
+  "$scratch/media-vault" plan \
+    --ingest "$scratch/ingest" --ingest-id demo-ingest \
+    --ingest-device "$(stat -f '%d' "$scratch/ingest")" \
+    --archive "$scratch/archive" --archive-id demo-archive \
+    --archive-device "$(stat -f '%d' "$scratch/archive")" \
+    > "$scratch/plan.json"
+  printf 'Plan saved at %s/plan.json\n' "$scratch"
+)
 ```
 
-### 2. Install Dependencies
+A successful result contains `plan_sha256`, sets `plan.complete` to `true`,
+and includes one entry in `plan.rows` with `"action": "copy"`. The action
+describes a proposed copy. The example stores the plan alongside the two
+demo directories and leaves the archive directory with only its root marker.
 
-```bash
-# This creates virtual environment and installs everything
-make setup
-
-# Activate the environment
-source .venv/bin/activate
-```
-
-### 3. Verify Installation
-
-```bash
-# Check volumes are accessible
-make check-volumes
-
-# Should show:
-# ✓ Source volume found: /Volumes/RodMedia
-# ⚠ Target volume not found (expected): /Volumes/RodNAS/Media
-```
-
-### 4. Review Configuration
-
-```bash
-# Edit device mappings if needed
-nano config/device_mappings.yaml
-
-# The defaults should work for your setup:
-# - sony-fx-3 → CAM_fx3
-# - sony-fx-30 → CAM_fx30
-# - etc.
-```
-
-### 5. Test with Dry Run
-
-```bash
-# Quick preview (no hashing, just scans files)
-make analyze-dry
-
-# This should complete in ~10-20 minutes
-# Shows what WOULD be analyzed without actually computing hashes
-```
-
-### 6. Full Analysis
-
-```bash
-# IMPORTANT: This takes 4-6 hours
-# Run in tmux/screen so it doesn't stop if your session disconnects
-
-# Start tmux
-tmux new-session -s analysis
-
-# Run analysis
-make analyze
-
-# Detach from tmux: Ctrl+b, then d
-# Reattach later: tmux attach -t analysis
-```
-
-### 7. Review Results
-
-After analysis completes:
-
-```bash
-# Read the summary
-cat analysis_results/analysis_summary.txt
-
-# Check duplicate statistics
-make duplicates
-
-# Review the full manifest (JSON)
-less analysis_results/migration_manifest.json
-
-# Look at duplicate report (CSV)
-open analysis_results/duplicates_report.csv
-```
-
-### 8. When NAS Arrives
-
-```bash
-# 1. Connect NAS, verify it mounts at /Volumes/RodNAS
-
-# 2. Create folder structure
-# No approved structure writer is available.
-
-# 3. Preview migration
-# No migration preview target is available.
-
-# 4. Execute migration (in tmux!)
-tmux new-session -s migration
-make migrate
-
-# 5. Verify everything copied correctly
-make verify-migration
-
-# 6. Review independent restore evidence with the operator; preserve sources
-```
-
-## Troubleshooting
-
-### "UV not found"
-```bash
-# Install UV
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Add to PATH (add to ~/.zshrc or ~/.bashrc)
-export PATH="$HOME/.cargo/bin:$PATH"
-
-# Reload shell
-source ~/.zshrc
-```
-
-### "ffmpeg not found"
-```bash
-# Install via Homebrew
-brew install ffmpeg
-
-# Verify
-ffmpeg -version
-```
-
-### "Permission denied" errors
-```bash
-# Make scripts executable
-chmod +x scripts/*.sh
-
-# Or just use make commands (they handle this)
-# No approved structure writer is available.
-```
-
-### Analysis is slow
-This is normal. With 4TB of data:
-- Scanning files: ~5-10 minutes
-- Computing hashes: ~4-6 hours (BLAKE3 is fast, but 4TB is a lot)
-- Extracting metadata: included in above
-
-Run in tmux/screen and let it run overnight.
-
-## What to Expect
-
-### Analysis Phase
-- **Time**: 4-6 hours
-- **Output**: 3 files in `analysis_results/`
-  - `migration_manifest.json` (~50-100MB)
-  - `duplicates_report.csv` (~1-5MB)
-  - `analysis_summary.txt` (~10KB)
-- **Action**: Review these files, especially duplicates
-
-### Migration Phase
-- **Time**: 8-12 hours (depends on NAS speed)
-- **Action**: Let it run in tmux, check progress occasionally
-- **Safety**: Can be interrupted and resumed
-
-### Verification Phase
-- **Time**: 2-4 hours
-- **Action**: Review independent restore evidence; preserve source content
-
-## Common Questions
-
-**Q: Can I pause and resume?**
-A: Yes! The migrator checks if files already exist and skips them. Just run `make migrate` again.
-
-**Q: What if I find errors?**
-A: Check the error logs. Most common: file permissions, disk full, network issues. Fix and re-run.
-
-**Q: How much space will I save?**
-A: Expect 400-800GB from deduplication based on your archive.
-
-**Q: Can I migrate in batches?**
-A: Yes! Edit the manifest JSON to only include certain files, or modify the Makefile `--batch-size` parameter.
-
-**Q: What if my NAS has a different path?**
-A: Do not restore storage defaults or enable the legacy recipes. Replacement tools,
-exact selected roots and a separately approved storage session are required.
-
-## Next Steps After Migration
-
-Once migration is verified:
-
-1. **Update cloud backup** to sync from NAS instead of SSD
-2. **Test workflow** - import new footage using new structure
-3. **Add advanced features**:
-   - Whisper transcription
-   - Web search UI
-   - Automated ingest pipeline
-4. **Document your workflow** for future reference
-
-## Getting Help
-
-- Check `make help` for all available commands
-- Review error logs in `analysis_results/`
-- Read the main README.md for detailed explanations
-- Open GitHub issue with logs if stuck
-
-Happy organizing! 🎥
+For root admission, conflict handling and exit behavior, see the
+[planner guide](docs/GO-PLAN.md). The demo admits only the scratch directories.
+Runtime must admit the canonical paths, logical marker IDs and current device
+numbers for any approved real-storage run. Legacy migration and catalog Make
+targets are disabled.
